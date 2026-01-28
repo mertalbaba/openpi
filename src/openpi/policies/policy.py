@@ -40,8 +40,7 @@ class Policy(BasePolicy):
         self.action_horizon = model.action_horizon
         self._get_prefix_rep = nnx_utils.module_jit(model.get_prefix_rep)
 
-    @override
-    def infer(self, obs: dict, noise: jnp.ndarray | None = None) -> dict:  # type: ignore[misc]
+    def _prepare_inputs(self, obs: dict) -> tuple[dict, int]:
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
@@ -53,7 +52,7 @@ class Policy(BasePolicy):
                     x[jnp.newaxis, ...],
                     (batch_size,) + x.shape
                 )
-                
+
             inputs = jax.tree.map(lambda x: jnp.asarray(x), inputs)
             for key in inputs:
                 if key not in ["image", "state"]:
@@ -61,6 +60,17 @@ class Policy(BasePolicy):
         else:
             batch_size = 1
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
+        return inputs, batch_size
+
+    def _postprocess_outputs(self, outputs: dict, batch_size: int) -> dict:
+        # Unbatch and convert to np.ndarray.
+        if batch_size == 1:
+            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
+        return self._output_transform(outputs)
+
+    @override
+    def infer(self, obs: dict, noise: jnp.ndarray | None = None) -> dict:  # type: ignore[misc]
+        inputs, batch_size = self._prepare_inputs(obs)
         # self._rng, sample_rng = jax.random.split(self._rng)
         if noise is None:
             self._rng, sample_rng = jax.random.split(self._rng)
@@ -70,11 +80,56 @@ class Policy(BasePolicy):
             "actions": self._sample_actions(_model.Observation.from_dict(inputs), noise=noise, **self._sample_kwargs),
         }
 
-        # Unbatch and convert to np.ndarray.
-        if batch_size == 1:
-            outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
-    
-        return self._output_transform(outputs)
+        return self._postprocess_outputs(outputs, batch_size)
+
+    def prepare_observation(self, obs: dict) -> _model.Observation:
+        inputs, _ = self._prepare_inputs(obs)
+        return _model.Observation.from_dict(inputs)
+
+    def infer_with_model(
+        self,
+        model: _model.BaseModel,
+        obs: dict,
+        *,
+        noise: jnp.ndarray | None = None,
+        rng: at.KeyArrayLike | None = None,
+        eta: float = 0.0,
+        num_steps: int | None = None,
+        return_log_probs: bool = False,
+    ) -> tuple[dict, jnp.ndarray] | dict:
+        inputs, batch_size = self._prepare_inputs(obs)
+        if noise is None:
+            if rng is None:
+                self._rng, rng = jax.random.split(self._rng)
+            noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
+
+        sample_kwargs = dict(self._sample_kwargs)
+        if num_steps is not None:
+            sample_kwargs["num_steps"] = num_steps
+
+        if return_log_probs:
+            actions, log_probs = model.sample_actions(
+                _model.Observation.from_dict(inputs),
+                noise=noise,
+                rng=rng,
+                eta=eta,
+                return_log_probs=True,
+                **sample_kwargs,
+            )
+            outputs = {"state": inputs["state"], "actions": actions}
+            return self._postprocess_outputs(outputs, batch_size), log_probs
+
+        outputs = {
+            "state": inputs["state"],
+            "actions": model.sample_actions(
+                _model.Observation.from_dict(inputs),
+                noise=noise,
+                rng=rng,
+                eta=eta,
+                **sample_kwargs,
+            ),
+        }
+        return self._postprocess_outputs(outputs, batch_size)
     
     @override
     def get_prefix_rep(self, obs: dict):

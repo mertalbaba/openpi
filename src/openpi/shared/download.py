@@ -78,7 +78,7 @@ def maybe_download(url: str, *, force_download: bool = False, **kwargs) -> pathl
 
     try:
         lock_path = local_path.with_suffix(".lock")
-        with filelock.FileLock(lock_path):
+        with filelock.SoftFileLock(lock_path):
             # Ensure consistent permissions for the lock file.
             _ensure_permissions(lock_path)
             # First, remove the existing cache if it is expired.
