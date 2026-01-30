@@ -19,9 +19,9 @@ logger = logging.getLogger("openpi")
 
 
 def make_attn_mask(
-    input_mask: at.Bool[at.Array, "b s"],
-    mask_ar: at.Bool[at.Array, " s"],
-) -> at.Bool[at.Array, "b s s"]:
+    input_mask: at.Bool[at.Array, "batch seq"],
+    mask_ar: at.Bool[at.Array, " seq"],
+) -> at.Bool[at.Array, "batch seq seq"]:
     """Adapted from big_vision.
 
     Tokens can attend to valid inputs tokens which have a cumulative mask_ar
@@ -51,11 +51,11 @@ def make_attn_mask(
 
 @at.typecheck
 def posemb_sincos(
-    pos: at.Real[at.Array, " b"],
+    pos: at.Real[at.Array, " batch"],
     embedding_dim: int,
     min_period: float,
     max_period: float,
-) -> at.Float[at.Array, "b {embedding_dim}"]:
+) -> at.Float[at.Array, "batch {embedding_dim}"]:
     """Computes sine-cosine positional embedding vectors for scalar positions."""
     if embedding_dim % 2 != 0:
         raise ValueError(f"embedding_dim ({embedding_dim}) must be divisible by 2")
