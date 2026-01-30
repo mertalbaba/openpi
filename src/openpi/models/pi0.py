@@ -18,7 +18,10 @@ from tensorflow_probability.substrates.jax import distributions as tfd
 logger = logging.getLogger("openpi")
 
 
-def make_attn_mask(input_mask, mask_ar):
+def make_attn_mask(
+    input_mask: at.Bool[at.Array, "b s"],
+    mask_ar: at.Bool[at.Array, " s"],
+) -> at.Bool[at.Array, "b s s"]:
     """Adapted from big_vision.
 
     Tokens can attend to valid inputs tokens which have a cumulative mask_ar
@@ -39,8 +42,8 @@ def make_attn_mask(input_mask, mask_ar):
       mask_ar: bool[?B, N] mask that's true where previous tokens cannot depend on
         it and false where it shares the same attention mask as the previous token.
     """
-    mask_ar = jnp.broadcast_to(mask_ar, input_mask.shape)
-    cumsum = jnp.cumsum(mask_ar, axis=1)
+    broadcast_ar_mask = jnp.broadcast_to(mask_ar, input_mask.shape)
+    cumsum = jnp.cumsum(broadcast_ar_mask, axis=1)
     attn_mask = cumsum[:, None, :] <= cumsum[:, :, None]
     valid_mask = input_mask[:, None, :] * input_mask[:, :, None]
     return jnp.logical_and(attn_mask, valid_mask)
@@ -48,7 +51,10 @@ def make_attn_mask(input_mask, mask_ar):
 
 @at.typecheck
 def posemb_sincos(
-    pos: at.Real[at.Array, " b"], embedding_dim: int, min_period: float, max_period: float
+    pos: at.Real[at.Array, " b"],
+    embedding_dim: int,
+    min_period: float,
+    max_period: float,
 ) -> at.Float[at.Array, "b {embedding_dim}"]:
     """Computes sine-cosine positional embedding vectors for scalar positions."""
     if embedding_dim % 2 != 0:
@@ -165,6 +171,7 @@ class Pi0(_model.BaseModel):
             )
         )
         img.lazy_init(next(iter(config.fake_obs().images.values())), train=False, rngs=rngs)
+        # Store as a small module namespace to keep external callsites unchanged.
         self.PaliGemma = nnx.Dict(llm=llm, img=img)
         self.state_proj = nnx.Linear(config.action_dim, action_expert_config.width, rngs=rngs)
         self.action_in_proj = nnx.Linear(config.action_dim, action_expert_config.width, rngs=rngs)
@@ -175,35 +182,36 @@ class Pi0(_model.BaseModel):
     @override
     def _get_sde_dist(
         self,
-        x_t: at.Float[at.Array, "b ah ad"],
-        v_t: at.Float[at.Array, "b ah ad"],
-        time: at.Float[at.Array, " b"],
+        x_t: at.Float[at.Array, "batch horizon action"],
+        v_t: at.Float[at.Array, "batch horizon action"],
+        time: at.Float[at.Array, " batch"],
         dt: at.Float[at.Array, ""],
         noise_level: float = 0.7,
     ) -> tfd.Distribution:
         dt_abs = jnp.abs(dt)
 
         time = jnp.clip(time, 0.0, 1 - dt_abs)
-        time = time[:, None, None]  # shape (b, 1, 1)   
+        time = time[:, None, None]  # shape (batch, 1, 1)
 
         sigma_t = noise_level * jnp.sqrt(time / (1 - time))
-        
-        mean_t = (1 + sigma_t ** 2 / (2 * time) * dt) * x_t + (1 + sigma_t ** 2 / (2 * time) * (1 - time)) * v_t * dt
-        scale_diag = jnp.ones_like(mean_t) * (sigma_t * jnp.sqrt(dt_abs)) 
-        # jax.debug.print("mean_t shape: {}", mean_t.shape)
-        # jax.debug.print("scale_diag shape: {}", scale_diag.shape)
+
+        mean_t = (
+            (1 + sigma_t**2 / (2 * time) * dt) * x_t
+            + (1 + sigma_t**2 / (2 * time) * (1 - time)) * v_t * dt
+        )
+        scale_diag = jnp.ones_like(mean_t) * (sigma_t * jnp.sqrt(dt_abs))
         return tfd.MultivariateNormalDiag(loc=mean_t, scale_diag=scale_diag)
 
     @override
     def get_dist_and_log_prob(
         self,
-        x_t: at.Float[at.Array, "b ah ad"],
-        sample: at.Float[at.Array, "b ah ad"],
-        time: at.Float[at.Array, " b"],
+        x_t: at.Float[at.Array, "batch horizon action"],
+        sample: at.Float[at.Array, "batch horizon action"],
+        time: at.Float[at.Array, " batch"],
         observation: _model.Observation,
         dt: at.Float[at.Array, ""],
         noise_level: float = 0.7,
-    ) -> tuple[at.Float[at.Array, "b ah"], tfd.Distribution]:
+    ) -> tuple[at.Float[at.Array, "batch horizon"], tfd.Distribution]:
         # one big forward pass of prefix + suffix at once
         # Embed image and text
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -216,23 +224,25 @@ class Pi0(_model.BaseModel):
         (prefix_out, suffix_out), _ = self.PaliGemma.llm(
             [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions
         )
-        v_t = self.action_out_proj(suffix_out[:, -self.action_horizon:])
+        v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
         dist = self._get_sde_dist(x_t=x_t, v_t=v_t, time=time, dt=dt, noise_level=noise_level)
 
         return dist.log_prob(sample), dist
 
-
     @at.typecheck
     def embed_prefix(
         self, obs: _model.Observation
-    ) -> tuple[at.Float[at.Array, "b s emb"], at.Bool[at.Array, "b s"], at.Bool[at.Array, " s"]]:
+    ) -> tuple[
+        at.Float[at.Array, "batch prefix_seq embed"],
+        at.Bool[at.Array, "batch prefix_seq"],
+        at.Bool[at.Array, " prefix_seq"],
+    ]:
         input_mask = []
         ar_mask = []
         tokens = []
         # embed images
         for name in obs.images:
             image_tokens, _ = self.PaliGemma.img(obs.images[name], train=False)
-
             tokens.append(image_tokens)
             input_mask.append(
                 einops.repeat(
@@ -246,11 +256,11 @@ class Pi0(_model.BaseModel):
 
         # add language (aka tokenized inputs)
         if obs.tokenized_prompt is not None:
-            tokenized_inputs = self.PaliGemma.llm(obs.tokenized_prompt, method="embed")
-            tokens.append(tokenized_inputs)
+            prompt_tokens = self.PaliGemma.llm(obs.tokenized_prompt, method="embed")
+            tokens.append(prompt_tokens)
             input_mask.append(obs.tokenized_prompt_mask)
             # full attention between image and language inputs
-            ar_mask += [False] * tokenized_inputs.shape[1]
+            ar_mask += [False] * prompt_tokens.shape[1]
         tokens = jnp.concatenate(tokens, axis=1)
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = jnp.array(ar_mask)
@@ -258,8 +268,15 @@ class Pi0(_model.BaseModel):
 
     @at.typecheck
     def embed_suffix(
-        self, obs: _model.Observation, noisy_actions: _model.Actions, timestep: at.Float[at.Array, " b"]
-    ) -> tuple[at.Float[at.Array, "b s emb"], at.Bool[at.Array, "b s"], at.Bool[at.Array, " s"]]:
+        self,
+        obs: _model.Observation,
+        noisy_actions: _model.Actions,
+        timestep: at.Float[at.Array, " batch"],
+    ) -> tuple[
+        at.Float[at.Array, "batch suffix_seq embed"],
+        at.Bool[at.Array, "batch suffix_seq"],
+        at.Bool[at.Array, " suffix_seq"],
+    ]:
         input_mask = []
         ar_mask = []
         tokens = []
@@ -275,12 +292,12 @@ class Pi0(_model.BaseModel):
         # mix timestep + action information using an MLP
         action_tokens = self.action_in_proj(noisy_actions)
         time_tokens = einops.repeat(time_emb, "b emb -> b s emb", s=self.action_horizon)
-        action_time_tokens = jnp.concatenate([action_tokens, time_tokens], axis=-1)
-        action_time_tokens = self.action_time_mlp_in(action_time_tokens)
-        action_time_tokens = nnx.swish(action_time_tokens)
-        action_time_tokens = self.action_time_mlp_out(action_time_tokens)
-        tokens.append(action_time_tokens)
-        input_mask.append(jnp.ones(action_time_tokens.shape[:2], dtype=jnp.bool_))
+        time_conditioned_tokens = jnp.concatenate([action_tokens, time_tokens], axis=-1)
+        time_conditioned_tokens = self.action_time_mlp_in(time_conditioned_tokens)
+        time_conditioned_tokens = nnx.swish(time_conditioned_tokens)
+        time_conditioned_tokens = self.action_time_mlp_out(time_conditioned_tokens)
+        tokens.append(time_conditioned_tokens)
+        input_mask.append(jnp.ones(time_conditioned_tokens.shape[:2], dtype=jnp.bool_))
         # image/language/state inputs do not attend to action tokens
         ar_mask += [True] + ([False] * (self.action_horizon - 1))
         tokens = jnp.concatenate(tokens, axis=1)
@@ -291,15 +308,15 @@ class Pi0(_model.BaseModel):
     @override
     def compute_loss(
         self, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions, *, train: bool = False
-    ) -> at.Float[at.Array, "*b ah"]:
+    ) -> at.Float[at.Array, "*batch horizon"]:
         preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
         observation = _model.preprocess_observation(preprocess_rng, observation, train=train)
 
         batch_shape = actions.shape[:-2]
         noise = jax.random.normal(noise_rng, actions.shape)
         time = jax.random.beta(time_rng, 1.5, 1, batch_shape) * 0.999 + 0.001
-        time_expanded = time[..., None, None]
-        x_t = time_expanded * noise + (1 - time_expanded) * actions
+        time_broadcast = time[..., None, None]
+        x_t = time_broadcast * noise + (1 - time_broadcast) * actions
         u_t = noise - actions
 
         # one big forward pass of prefix + suffix at once
@@ -321,7 +338,7 @@ class Pi0(_model.BaseModel):
         self,
         observation: _model.Observation,
         *,
-        noise: jnp.ndarray,
+        noise: at.Float[at.Array, "batch horizon action"],
         num_steps: int | at.Int[at.Array, ""] = 10,
         rng: at.KeyArrayLike | None = None,
         noise_level: float = 0.0,
@@ -339,7 +356,7 @@ class Pi0(_model.BaseModel):
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
         stochastic_generation = (rng is not None) and (noise_level > 0.0)
 
-        def compute_v_t(x_t, time):
+        def compute_v_t(x_t: at.Float[at.Array, "batch horizon action"], time: at.Float[at.Array, " batch"]):
             suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
             )
@@ -405,18 +422,13 @@ class Pi0(_model.BaseModel):
 
         if return_info_dict:
             return x_0, out
-        else:
-            return x_0
-    
-    # get the prfix representation
-    def get_prefix_rep(self, observation: _model.Observation):
-        """
-        Returns the Gemma (VLM) hidden‐state representations for images + language.
-        Output shape is [B, S_prefix, W], where:
-          B = batch size,
-          S_prefix = total # of image tokens + text tokens,
-          W = Gemma hidden‑width.
-        """
+        return x_0
+
+    # get the prefix representation
+    def get_prefix_rep(
+        self, observation: _model.Observation
+    ) -> tuple[at.Float[at.Array, "batch prefix_seq embed"], _gemma.KVCache]:
+        """Return Gemma hidden-state representations for images + language."""
         observation = _model.preprocess_observation(None, observation, train=False)
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
