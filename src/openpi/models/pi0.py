@@ -182,8 +182,8 @@ class Pi0(_model.BaseModel):
     @override
     def _get_sde_dist(
         self,
-        x_t: at.Float[at.Array, "batch horizon action"],
-        v_t: at.Float[at.Array, "batch horizon action"],
+        x_t: at.Float[at.Array, "batch horizon action_dim"],
+        v_t: at.Float[at.Array, "batch horizon action_dim"],
         time: at.Float[at.Array, " batch"],
         dt: at.Float[at.Array, ""],
         noise_level: float = 0.7,
@@ -205,8 +205,8 @@ class Pi0(_model.BaseModel):
     @override
     def get_dist_and_log_prob(
         self,
-        x_t: at.Float[at.Array, "batch horizon action"],
-        sample: at.Float[at.Array, "batch horizon action"],
+        x_t: at.Float[at.Array, "batch horizon action_dim"],
+        sample: at.Float[at.Array, "batch horizon action_dim"],
         time: at.Float[at.Array, " batch"],
         observation: _model.Observation,
         dt: at.Float[at.Array, ""],
@@ -338,7 +338,7 @@ class Pi0(_model.BaseModel):
         self,
         observation: _model.Observation,
         *,
-        noise: at.Float[at.Array, "batch horizon action"],
+        noise: at.Float[at.Array, "batch horizon action_dim"],
         num_steps: int | at.Int[at.Array, ""] = 10,
         rng: at.KeyArrayLike | None = None,
         noise_level: float = 0.0,
@@ -356,7 +356,9 @@ class Pi0(_model.BaseModel):
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
         stochastic_generation = (rng is not None) and (noise_level > 0.0)
 
-        def compute_v_t(x_t: at.Float[at.Array, "batch horizon action"], time: at.Float[at.Array, " batch"]):
+        def compute_v_t(
+            x_t: at.Float[at.Array, "batch horizon action_dim"], time: at.Float[at.Array, " batch"]
+        ):
             suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
             )
