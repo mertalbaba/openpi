@@ -178,11 +178,11 @@ class Pi0(_model.BaseModel):
 
         time = jnp.clip(time, 0.0, 1 - dt_abs)
 
-        sigma_t = noise_level * jnp.sqrt(time / (1 - time)) * jnp.sqrt(dt_abs)
+        sigma_t = noise_level * jnp.sqrt(time / (1 - time))
 
         mean_t = (1 + sigma_t ** 2 / (2 * time) * dt) * x_t + (1 + sigma_t ** 2 / (2 * time) * (1 - time)) * v_t * dt
 
-        return distrax.MultivariateNormalDiag(mean_t, sigma_t)
+        return distrax.MultivariateNormalDiag(mean_t, sigma_t * jnp.sqrt(dt_abs))
 
     @override
     def get_dist_and_log_prob(self, x_t, sample, time, observation, dt, noise_level: float = 0.7):
