@@ -185,7 +185,7 @@ class Pi0(_model.BaseModel):
         return distrax.MultivariateNormalDiag(mean_t, sigma_t)
 
     @override
-    def _get_log_prob(self, x_t, sample, time, observation, dt, noise_level: float = 0.7):
+    def get_dist_and_log_prob(self, x_t, sample, time, observation, dt, noise_level: float = 0.7):
         # one big forward pass of prefix + suffix at once
         # Embed image and text
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -201,7 +201,7 @@ class Pi0(_model.BaseModel):
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon:])
         dist = self._get_sde_dist(x_t=x_t, v_t=v_t, time=time, dt=dt, noise_level=noise_level)
 
-        return dist.log_prob(sample)
+        return dist.log_prob(sample), dist
 
 
     @at.typecheck
