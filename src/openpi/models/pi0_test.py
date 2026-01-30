@@ -78,5 +78,38 @@ def test_pi0_get_dist_and_log_prob_shapes():
     assert dist.event_shape == (config.action_dim,)
 
 
+def test_pi0_sample_actions_shapes():
+    config = _pi0.Pi0Config(
+        action_dim=4,
+        action_horizon=6,
+        max_token_len=8,
+        paligemma_variant="dummy",
+        action_expert_variant="dummy",
+    )
+
+    model = config.create(jax.random.key(0))
+    obs_spec, action_spec = config.inputs_spec(batch_size=2)
+    obs = jax.tree.map(lambda s: jnp.zeros(s.shape, s.dtype), obs_spec)
+    noise = jax.tree.map(lambda s: jnp.zeros(s.shape, s.dtype), action_spec)
+
+    x_0, info = jax.eval_shape(
+        lambda: model.sample_actions(
+            observation=obs,
+            noise=noise,
+            num_steps=3,
+            rng=None,
+            noise_level=0.0,
+            return_info_dict=True,
+        )
+    )
+
+    assert x_0.shape == (2, config.action_horizon, config.action_dim)
+    assert info["x_next"].shape == (3, 2, config.action_horizon, config.action_dim)
+    assert info["x"].shape == (3, 2, config.action_horizon, config.action_dim)
+    assert info["log_prob"].shape == (3, 2, config.action_horizon)
+    assert info["time"].shape == (3,)
+    assert info["time_next"].shape == (3,)
+
+
 if __name__ == "__main__":
-    test_pi0_get_dist_and_log_prob_shapes()
+    test_pi0_sample_actions_shapes()
