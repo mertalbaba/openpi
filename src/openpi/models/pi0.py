@@ -386,9 +386,9 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         if stochastic_generation:
-            (x_0, _, _), out = jax.lax.while_loop(cond, stochastic_step, (noise, 1.0, rng))
+            (x_0, _, _), out = jax.lax.scan(cond, stochastic_step, (noise, 1.0, rng))
         else:
-            (x_0, _), out = jax.lax.while_loop(cond, deterministic_step, (noise, 1.0))
+            (x_0, _), out = jax.lax.scan(cond, deterministic_step, (noise, 1.0))
 
         if return_info_dict:
             return x_0, out
