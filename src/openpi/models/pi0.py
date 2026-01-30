@@ -380,15 +380,10 @@ class Pi0(_model.BaseModel):
             }
             return (x_next, t_next), out
 
-        def cond(carry):
-            time = carry[1]
-            # robust to floating-point error
-            return time >= -dt / 2
-
         if stochastic_generation:
-            (x_0, _, _), out = jax.lax.scan(cond, stochastic_step, (noise, 1.0, rng))
+            (x_0, _, _), out = jax.lax.scan(stochastic_step, (noise, 1.0, rng), xs=None, length=num_steps)
         else:
-            (x_0, _), out = jax.lax.scan(cond, deterministic_step, (noise, 1.0))
+            (x_0, _), out = jax.lax.scan(deterministic_step, (noise, 1.0), xs=None, length=num_steps)
 
         if return_info_dict:
             return x_0, out
