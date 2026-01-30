@@ -13,6 +13,7 @@ import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
 import openpi.shared.nnx_utils as nnx_utils
+import distrax
 
 logger = logging.getLogger("openpi")
 
@@ -171,6 +172,38 @@ class Pi0(_model.BaseModel):
         self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
+    @override
+    def _get_sde_dist(self, x_t, v_t, time, dt, noise_level: float = 0.7):
+        dt_abs = jnp.abs(dt)
+
+        time = jnp.clip(time, 0.0, 1 - dt_abs)
+
+        sigma_t = noise_level * jnp.sqrt(time / (1 - time)) * jnp.sqrt(dt_abs)
+
+        mean_t = (1 + sigma_t ** 2 / (2 * time) * dt) * x_t + (1 + sigma_t ** 2 / (2 * time) * (1 - time)) * v_t * dt
+
+        return distrax.MultivariateNormalDiag(mean_t, sigma_t)
+
+    @override
+    def _get_log_prob(self, x_t, sample, time, observation, dt, noise_level: float = 0.7):
+        # one big forward pass of prefix + suffix at once
+        # Embed image and text
+        prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
+        # Embed state and noisy action
+        suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(observation, x_t, time)
+        input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
+        ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
+        attn_mask = make_attn_mask(input_mask, ar_mask)
+        positions = jnp.cumsum(input_mask, axis=1) - 1
+        (prefix_out, suffix_out), _ = self.PaliGemma.llm(
+            [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions
+        )
+        v_t = self.action_out_proj(suffix_out[:, -self.action_horizon:])
+        dist = self._get_sde_dist(x_t=x_t, v_t=v_t, time=time, dt=dt, noise_level=noise_level)
+
+        return dist.log_prob(sample)
+
+
     @at.typecheck
     def embed_prefix(
         self, obs: _model.Observation
@@ -273,8 +306,8 @@ class Pi0(_model.BaseModel):
         noise: jnp.ndarray,
         num_steps: int | at.Int[at.Array, ""] = 10,
         rng: at.KeyArrayLike | None = None,
-        eta: float = 0.0,
-        return_log_probs: bool = False,
+        noise_level: float = 0.0,
+        return_info_dict: bool = True,
     ) -> _model.Actions:
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
@@ -286,6 +319,8 @@ class Pi0(_model.BaseModel):
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
+        stochastic_generation = (rng is not None) and (noise_level > 0.0)
+
         def compute_v_t(x_t, time):
             suffix_tokens, suffix_mask, suffix_ar_mask = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
@@ -313,59 +348,52 @@ class Pi0(_model.BaseModel):
             assert prefix_out is None
             return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-        if return_log_probs or (rng is not None and eta != 0.0):
-            # Stochastic transitions with log-probs (flow-GRPO SDE style, https://arxiv.org/pdf/2505.05470).
-            noise_level = jnp.asarray(eta, dtype=noise.dtype)
-            dt = jnp.asarray(dt, dtype=noise.dtype)
-            sqrt_neg_dt = jnp.sqrt(jnp.maximum(-dt, jnp.asarray(0.0, dtype=noise.dtype)))
-            sigma_max = jnp.asarray(1.0, dtype=noise.dtype) + dt
-            sigma_max = jnp.maximum(sigma_max, jnp.asarray(1e-6, dtype=noise.dtype))
+        def stochastic_step(carry, _):
+            x_t, time, step_rng = carry
+            v_t = compute_v_t(x_t, time)
+            dist = self._get_sde_dist(x_t, v_t, time, dt, noise_level)
+            step_rng, key = jax.random.split(step_rng)
+            x_next = dist.sample(step_rng)
+            log_prob = dist.log_prob(x_next)
+            t_next = time + dt
+            out = {
+                'x_next': x_next,
+                'x': x_t,
+                'time_next': t_next,
+                'time': time,
+                'log_prob': log_prob,
+            }
+            return (x_next, t_next, key), out
 
-            def step(carry, _):
-                x_t, time, step_rng = carry
-                v_t = compute_v_t(x_t, time)
-                sigma = jnp.asarray(time, dtype=noise.dtype)
-                sigma = jnp.maximum(sigma, jnp.asarray(1e-6, dtype=noise.dtype))
-                sigma_safe = jnp.where(sigma == 1.0, sigma_max, sigma)
-                sigma_safe = jnp.maximum(sigma_safe, jnp.asarray(1e-6, dtype=noise.dtype))
-                std_dev_t = jnp.sqrt(sigma / (1 - sigma_safe)) * noise_level
-                mean = x_t * (1 + (std_dev_t**2) / (2 * sigma) * dt) + v_t * (
-                    1 + (std_dev_t**2) * (1 - sigma) / (2 * sigma)
-                ) * dt
-                if step_rng is None or eta == 0.0:
-                    x_next = mean
-                    log_prob = jnp.zeros((batch_size,), dtype=mean.dtype)
-                    next_rng = step_rng
-                else:
-                    step_rng, key = jax.random.split(step_rng)
-                    noise_eps = jax.random.normal(key, x_t.shape)
-                    noise_scale = std_dev_t * sqrt_neg_dt
-                    x_next = mean + noise_scale * noise_eps
-                    log_prob = (
-                        -((jax.lax.stop_gradient(x_next) - mean) ** 2) / (2 * (noise_scale**2))
-                        - jnp.log(noise_scale)
-                        - jnp.log(jnp.sqrt(2 * jnp.pi))
-                    )
-                    log_prob = jnp.mean(log_prob, axis=tuple(range(1, log_prob.ndim)))
-                    next_rng = step_rng
-                return (x_next, time + dt, next_rng), log_prob
-
-            (x_0, _, _), log_probs = jax.lax.scan(step, (noise, 1.0, rng), xs=None, length=num_steps)
-            if return_log_probs:
-                return x_0, log_probs
-            return x_0
-
-        def step(carry):
+        def deterministic_step(carry):
             x_t, time = carry
             v_t = compute_v_t(x_t, time)
-            return x_t + dt * v_t, time + dt
+            x_next = x_t + dt * v_t
+            t_next = time + dt
+            log_prob = jnp.zeros_like(x_next).sum(axis=-1)
+            out = {
+                'x_next': x_next,
+                'x': x_t,
+                'time_next': t_next,
+                'time': time,
+                'log_prob': log_prob,
+            }
+            return (x_next, t_next), out
 
         def cond(carry):
-            _, time = carry
+            time = carry[1]
             # robust to floating-point error
             return time >= -dt / 2
-        x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
-        return x_0
+
+        if stochastic_generation:
+            (x_0, _, _), out = jax.lax.while_loop(cond, stochastic_step, (noise, 1.0, rng))
+        else:
+            (x_0, _), out = jax.lax.while_loop(cond, deterministic_step, (noise, 1.0))
+
+        if return_info_dict:
+            return x_0, out
+        else:
+            return x_0
     
     # get the prfix representation
     def get_prefix_rep(self, observation: _model.Observation):
