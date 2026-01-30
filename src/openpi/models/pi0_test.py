@@ -1,5 +1,6 @@
 import flax.nnx as nnx
 import jax
+import jax.numpy as jnp
 
 import openpi.models.pi0 as _pi0
 
@@ -44,3 +45,38 @@ def test_pi0_all_lora():
     assert len(state) == 17
     assert all("lora" not in p for p in state)
     assert all("llm" in p for p in state)
+
+
+def test_pi0_get_dist_and_log_prob_shapes():
+    config = _pi0.Pi0Config(action_dim=4, action_horizon=6, max_token_len=8, 
+                            paligemma_variant='dummy',
+                            action_expert_variant='dummy')
+
+    # IMPORTANT: create a real model (params are real arrays), not a shape-only model
+    model = config.create(jax.random.key(0))
+
+    # Get input specs and materialize them into real dummy arrays
+    obs_spec, action_spec = config.inputs_spec(batch_size=2)
+
+    obs = jax.tree.map(lambda s: jnp.zeros(s.shape, s.dtype), obs_spec)
+    action = jax.tree.map(lambda s: jnp.zeros(s.shape, s.dtype), action_spec)
+
+    time = jnp.zeros((2,), dtype=jnp.float32)
+    dt = jnp.zeros((), dtype=jnp.float32)  # scalar
+
+    # Run the actual computation (not eval_shape)
+    log_prob, dist = model.get_dist_and_log_prob(
+        x_t=action,
+        sample=action,
+        time=time,
+        observation=obs,
+        dt=dt,
+    )
+
+    assert log_prob.shape == (2, config.action_horizon)
+    assert dist.batch_shape == (2, config.action_horizon)
+    assert dist.event_shape == (config.action_dim,)
+
+
+if __name__ == "__main__":
+    test_pi0_get_dist_and_log_prob_shapes()

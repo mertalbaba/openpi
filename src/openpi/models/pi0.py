@@ -13,7 +13,7 @@ import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
 import openpi.shared.nnx_utils as nnx_utils
-import distrax
+from tensorflow_probability.substrates.jax import distributions as tfd
 
 logger = logging.getLogger("openpi")
 
@@ -173,19 +173,37 @@ class Pi0(_model.BaseModel):
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
     @override
-    def _get_sde_dist(self, x_t, v_t, time, dt, noise_level: float = 0.7):
+    def _get_sde_dist(
+        self,
+        x_t: at.Float[at.Array, "b ah ad"],
+        v_t: at.Float[at.Array, "b ah ad"],
+        time: at.Float[at.Array, " b"],
+        dt: at.Float[at.Array, ""],
+        noise_level: float = 0.7,
+    ) -> tfd.Distribution:
         dt_abs = jnp.abs(dt)
 
         time = jnp.clip(time, 0.0, 1 - dt_abs)
+        time = time[:, None, None]  # shape (b, 1, 1)   
 
         sigma_t = noise_level * jnp.sqrt(time / (1 - time))
-
+        
         mean_t = (1 + sigma_t ** 2 / (2 * time) * dt) * x_t + (1 + sigma_t ** 2 / (2 * time) * (1 - time)) * v_t * dt
-
-        return distrax.MultivariateNormalDiag(mean_t, sigma_t * jnp.sqrt(dt_abs))
+        scale_diag = jnp.ones_like(mean_t) * (sigma_t * jnp.sqrt(dt_abs)) 
+        # jax.debug.print("mean_t shape: {}", mean_t.shape)
+        # jax.debug.print("scale_diag shape: {}", scale_diag.shape)
+        return tfd.MultivariateNormalDiag(loc=mean_t, scale_diag=scale_diag)
 
     @override
-    def get_dist_and_log_prob(self, x_t, sample, time, observation, dt, noise_level: float = 0.7):
+    def get_dist_and_log_prob(
+        self,
+        x_t: at.Float[at.Array, "b ah ad"],
+        sample: at.Float[at.Array, "b ah ad"],
+        time: at.Float[at.Array, " b"],
+        observation: _model.Observation,
+        dt: at.Float[at.Array, ""],
+        noise_level: float = 0.7,
+    ) -> tuple[at.Float[at.Array, "b ah"], tfd.Distribution]:
         # one big forward pass of prefix + suffix at once
         # Embed image and text
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
