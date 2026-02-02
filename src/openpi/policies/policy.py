@@ -96,7 +96,7 @@ class Policy(BasePolicy):
         *,
         noise: jnp.ndarray | None = None,
         rng: at.KeyArrayLike | None = None,
-        eta: float = 0.0,
+        noise_level: float = 0.0,
         num_steps: int | None = None,
         return_info_dict: bool = False,
     ) -> tuple[dict, jnp.ndarray] | dict:
@@ -116,7 +116,7 @@ class Policy(BasePolicy):
                 observation=_model.Observation.from_dict(inputs),
                 noise=noise,
                 rng=rng,
-                eta=eta,
+                noise_level=noise_level,
                 return_info_dict=True,
                 **sample_kwargs,
             )
@@ -131,7 +131,7 @@ class Policy(BasePolicy):
                     observation=_model.Observation.from_dict(inputs),
                     noise=noise,
                     rng=rng,
-                    eta=eta,
+                    noise_level=noise_level,
                     **sample_kwargs,
                 ),
             }
