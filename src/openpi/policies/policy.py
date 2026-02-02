@@ -5,6 +5,7 @@ from typing import Any, TypeAlias
 
 import flax
 import flax.traverse_util
+import flax.nnx as nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -31,6 +32,7 @@ class Policy(BasePolicy):
         metadata: dict[str, Any] | None = None,
     ):
         self._sample_actions = nnx_utils.module_jit(model.sample_actions)
+        self._sample_actions_with_model = nnx.jit(model.sample_actions)
         self._input_transform = _transforms.compose(transforms)
         self._output_transform = _transforms.compose(output_transforms)
         self._rng = rng or jax.random.key(0)
@@ -39,6 +41,7 @@ class Policy(BasePolicy):
         self.action_dim = model.action_dim
         self.action_horizon = model.action_horizon
         self._get_prefix_rep = nnx_utils.module_jit(model.get_prefix_rep)
+        self._get_prefix_rep_with_model = nnx.jit(model.get_prefix_rep)
 
     def _prepare_inputs(self, obs: dict) -> tuple[dict, int]:
         # Make a copy since transformations may modify the inputs in place.
@@ -95,7 +98,7 @@ class Policy(BasePolicy):
         rng: at.KeyArrayLike | None = None,
         eta: float = 0.0,
         num_steps: int | None = None,
-        return_log_probs: bool = False,
+        return_info_dict: bool = False,
     ) -> tuple[dict, jnp.ndarray] | dict:
         inputs, batch_size = self._prepare_inputs(obs)
         if noise is None:
@@ -107,29 +110,33 @@ class Policy(BasePolicy):
         if num_steps is not None:
             sample_kwargs["num_steps"] = num_steps
 
-        if return_log_probs:
-            actions, log_probs = model.sample_actions(
-                _model.Observation.from_dict(inputs),
+        if return_info_dict:
+            actions, extras = self._sample_actions_with_model(
+                model,
+                observation=_model.Observation.from_dict(inputs),
                 noise=noise,
                 rng=rng,
                 eta=eta,
-                return_log_probs=True,
+                return_info_dict=True,
                 **sample_kwargs,
             )
             outputs = {"state": inputs["state"], "actions": actions}
-            return self._postprocess_outputs(outputs, batch_size), log_probs
-
-        outputs = {
-            "state": inputs["state"],
-            "actions": model.sample_actions(
-                _model.Observation.from_dict(inputs),
-                noise=noise,
-                rng=rng,
-                eta=eta,
-                **sample_kwargs,
-            ),
-        }
-        return self._postprocess_outputs(outputs, batch_size)
+            outputs = self._postprocess_outputs(outputs, batch_size)
+            outputs['extras'] = extras
+        else:
+            outputs = {
+                "state": inputs["state"],
+                "actions": self._sample_actions_with_model(
+                    model,
+                    observation=_model.Observation.from_dict(inputs),
+                    noise=noise,
+                    rng=rng,
+                    eta=eta,
+                    **sample_kwargs,
+                ),
+            }
+            outputs = self._postprocess_outputs(outputs, batch_size)
+        return outputs
     
     @override
     def get_prefix_rep(self, obs: dict):
@@ -150,6 +157,28 @@ class Policy(BasePolicy):
         else:
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
         return self._get_prefix_rep(_model.Observation.from_dict(inputs))
+
+    @override
+    def get_prefix_rep_with_model(self, model: _model.BaseModel,  obs: dict):
+        inputs = jax.tree.map(lambda x: x, obs)
+        inputs = self._input_transform(inputs)
+        inputs = jax.tree.map(lambda x: jnp.asarray(x), inputs)
+        # add batch dim and broadcast for keys that are not "images" and "state"
+        if inputs["state"].ndim > 1:
+            batch_size = inputs["state"].shape[0]
+
+            def _add_batch_dim(x):
+                return jnp.broadcast_to(
+                    x[jnp.newaxis, ...],
+                    (batch_size,) + x.shape
+                )
+
+            for key in inputs:
+                if key not in ["image", "state"]:
+                    inputs[key] = jax.tree.map(lambda x: _add_batch_dim(x), inputs[key])
+        else:
+            inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
+        return self._get_prefix_rep(model, _model.Observation.from_dict(inputs))
 
     @property
     def metadata(self) -> dict[str, Any]:
