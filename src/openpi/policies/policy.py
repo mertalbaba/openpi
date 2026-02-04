@@ -32,7 +32,30 @@ class Policy(BasePolicy):
         metadata: dict[str, Any] | None = None,
     ):
         self._sample_actions = nnx_utils.module_jit(model.sample_actions)
-        self._sample_actions_with_model = nnx.jit(model.sample_actions)
+
+        def _sample_actions_with_model_fn(
+            m: _model.BaseModel,
+            *,
+            observation: _model.Observation,
+            noise: jnp.ndarray,
+            num_steps: int | jnp.ndarray = 10,
+            rng: at.KeyArrayLike | None = None,
+            noise_level: float = 0.0,
+            return_info_dict: bool = False,
+        ):
+            return m.sample_actions(
+                observation=observation,
+                noise=noise,
+                num_steps=num_steps,
+                rng=rng,
+                noise_level=noise_level,
+                return_info_dict=return_info_dict,
+            )
+
+        self._sample_actions_with_model = nnx.jit(
+            _sample_actions_with_model_fn,
+            static_argnames=("noise_level", "return_info_dict", "num_steps"),
+        )
         self._input_transform = _transforms.compose(transforms)
         self._output_transform = _transforms.compose(output_transforms)
         self._rng = rng or jax.random.key(0)
@@ -41,7 +64,7 @@ class Policy(BasePolicy):
         self.action_dim = model.action_dim
         self.action_horizon = model.action_horizon
         self._get_prefix_rep = nnx_utils.module_jit(model.get_prefix_rep)
-        self._get_prefix_rep_with_model = nnx.jit(model.get_prefix_rep)
+        self._get_prefix_rep_with_model = nnx.jit(lambda m, *args, **kwargs: m.get_prefix_rep(*args, **kwargs))
 
     def _prepare_inputs(self, obs: dict) -> tuple[dict, int]:
         # Make a copy since transformations may modify the inputs in place.
@@ -178,7 +201,7 @@ class Policy(BasePolicy):
                     inputs[key] = jax.tree.map(lambda x: _add_batch_dim(x), inputs[key])
         else:
             inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
-        return self._get_prefix_rep(model, _model.Observation.from_dict(inputs))
+        return self._get_prefix_rep_with_model(model, _model.Observation.from_dict(inputs))
 
     @property
     def metadata(self) -> dict[str, Any]:

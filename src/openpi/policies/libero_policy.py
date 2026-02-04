@@ -2,6 +2,8 @@ import dataclasses
 
 import einops
 import numpy as np
+import jax
+import jax.numpy as jnp
 
 from openpi import transforms
 from openpi.models import model as _model
@@ -18,7 +20,8 @@ def make_libero_example() -> dict:
 
 
 def _parse_image(image) -> np.ndarray:
-    image = np.asarray(image)
+    is_jax = isinstance(image, (jax.Array, jax.core.Tracer))
+    image = jnp.asarray(image) if is_jax else np.asarray(image)
     if np.issubdtype(image.dtype, np.floating):
         image = (255 * image).astype(np.uint8)
     if image.shape[0] == 3:
@@ -67,13 +70,14 @@ class LiberoInputs(transforms.DataTransformFn):
         wrist_image = _parse_image(data["observation/wrist_image"])
 
         # Create inputs dict. Do not change the keys in the dict below.
+        zeros_like = jnp.zeros_like if isinstance(base_image, (jax.Array, jax.core.Tracer)) else np.zeros_like
         inputs = {
             "state": state,
             "image": {
                 "base_0_rgb": base_image,
                 "left_wrist_0_rgb": wrist_image,
                 # Pad any non-existent images with zero-arrays of the appropriate shape.
-                "right_wrist_0_rgb": np.zeros_like(base_image),
+                "right_wrist_0_rgb": zeros_like(base_image),
             },
             "image_mask": {
                 "base_0_rgb": np.True_,

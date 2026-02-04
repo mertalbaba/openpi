@@ -6,7 +6,12 @@ from typing import Protocol, SupportsIndex, TypeVar
 
 import jax
 import jax.numpy as jnp
-# import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
+try:
+    import lerobot.datasets.lerobot_dataset as lerobot_dataset
+    _LEROBOT_IMPORT_ERROR = None
+except Exception as _err:  # pragma: no cover - import guard for optional dependency
+    lerobot_dataset = None
+    _LEROBOT_IMPORT_ERROR = _err
 import numpy as np
 import torch
 
@@ -15,6 +20,70 @@ import openpi.training.config as _config
 import openpi.transforms as _transforms
 
 T_co = TypeVar("T_co", covariant=True)
+
+
+def _maybe_patch_hf_datasets_filelock() -> None:
+    """Swap HF datasets file locks to soft locks for filesystems without flock.
+
+    Controlled by env var `HF_DATASETS_USE_SOFT_FILELOCK=1`.
+    """
+    try:
+        import datasets
+        import datasets.builder as ds_builder
+        import datasets.utils._filelock as ds_filelock
+        import datasets.utils.extract as ds_extract
+        import datasets.utils.file_utils as ds_file_utils
+        import datasets.utils.filelock as ds_filelock_compat
+        import datasets.utils.py_utils as ds_py_utils
+        from filelock import SoftFileLock
+    except Exception:
+        return
+
+    if os.environ.get("HF_DATASETS_DISABLE_LOCKING", "0") == "1":
+        class _NoOpFileLock:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        for module in (
+            datasets,
+            ds_builder,
+            ds_filelock,
+            ds_file_utils,
+            ds_extract,
+            ds_py_utils,
+            ds_filelock_compat,
+        ):
+            if hasattr(module, "FileLock"):
+                module.FileLock = _NoOpFileLock
+        return
+
+    if os.environ.get("HF_DATASETS_USE_SOFT_FILELOCK", "0") != "1":
+        return
+
+    original_filelock = ds_filelock.FileLock
+
+    class _SoftFileLockWithHash(SoftFileLock):
+        def __init__(self, lock_file, *args, **kwargs):
+            lock_file = original_filelock.hash_filename_if_too_long(lock_file)
+            super().__init__(lock_file, *args, **kwargs)
+
+    for module in (
+        datasets,
+        ds_builder,
+        ds_filelock,
+        ds_file_utils,
+        ds_extract,
+        ds_py_utils,
+        ds_filelock_compat,
+    ):
+        if hasattr(module, "FileLock"):
+            module.FileLock = _SoftFileLockWithHash
 
 
 class Dataset(Protocol[T_co]):
@@ -88,15 +157,22 @@ def create_dataset(data_config: _config.DataConfig, model_config: _model.BaseMod
         raise ValueError("Repo ID is not set. Cannot create dataset.")
     if repo_id == "fake":
         return FakeDataset(model_config, num_samples=1024)
+    if lerobot_dataset is None:
+        raise ImportError(
+            "LeRobot dataset support is not available. Install `lerobot` or ensure it is on PYTHONPATH. "
+            f"Original import error: {_LEROBOT_IMPORT_ERROR}"
+        )
 
-    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id, local_files_only=data_config.local_files_only)
+    _maybe_patch_hf_datasets_filelock()
+
+    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)#, local_files_only=data_config.local_files_only)
     dataset = lerobot_dataset.LeRobotDataset(
         data_config.repo_id,
         delta_timestamps={
             key: [t / dataset_meta.fps for t in range(model_config.action_horizon)]
             for key in data_config.action_sequence_keys
         },
-        local_files_only=data_config.local_files_only,
+        #local_files_only=data_config.local_files_only,
     )
 
     if data_config.prompt_from_task:

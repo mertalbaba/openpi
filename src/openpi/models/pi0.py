@@ -420,7 +420,7 @@ class Pi0(_model.BaseModel):
         if stochastic_generation:
             (x_0, _, _), out = jax.lax.scan(stochastic_step, (noise, 1.0, rng), xs=None, length=num_steps)
         else:
-            (x_0, _), out = jax.lax.scan(deterministic_step, (noise, 1.0), xs=None, length=num_steps)
+            (x_0, _), out = jax.lax.scan(lambda carry, _: deterministic_step(carry), (noise, 1.0), xs=None, length=num_steps)
 
         if return_info_dict:
             return x_0, out

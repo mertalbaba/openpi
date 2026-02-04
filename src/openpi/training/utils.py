@@ -9,6 +9,9 @@ import optax
 from openpi.models import model as _model
 from openpi.shared import array_typing as at
 
+# Work around Optax ForwardRef('ArrayTree') resolution during runtime typechecking.
+ArrayTree = at.PyTree
+
 
 @at.typecheck
 @struct.dataclass

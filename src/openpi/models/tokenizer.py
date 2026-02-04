@@ -1,4 +1,6 @@
 import logging
+import os
+import pathlib
 
 import numpy as np
 import sentencepiece
@@ -10,8 +12,14 @@ import openpi.shared.download as download
 class PaligemmaTokenizer:
     def __init__(self, max_len: int = 48):
         self._max_len = max_len
-
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        override_path = os.getenv("OPENPI_PALIGEMMA_TOKENIZER_PATH")
+        if override_path:
+            path = pathlib.Path(override_path).expanduser().resolve()
+            if not path.exists():
+                raise FileNotFoundError(f"OPENPI_PALIGEMMA_TOKENIZER_PATH not found: {path}")
+            logging.info("Using local PaliGemma tokenizer at %s", path)
+        else:
+            path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
         with path.open("rb") as f:
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
@@ -39,9 +47,15 @@ class PaligemmaTokenizer:
 class FASTTokenizer:
     def __init__(self, max_len: int = 256, fast_tokenizer_path: str = "physical-intelligence/fast"):
         self._max_len = max_len
-
-        # Download base PaliGemma tokenizer
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        # Download base PaliGemma tokenizer (or use local override).
+        override_path = os.getenv("OPENPI_PALIGEMMA_TOKENIZER_PATH")
+        if override_path:
+            path = pathlib.Path(override_path).expanduser().resolve()
+            if not path.exists():
+                raise FileNotFoundError(f"OPENPI_PALIGEMMA_TOKENIZER_PATH not found: {path}")
+            logging.info("Using local PaliGemma tokenizer at %s", path)
+        else:
+            path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
         with path.open("rb") as f:
             self._paligemma_tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 

@@ -404,6 +404,8 @@ def pad_to_dim(x: np.ndarray, target_dim: int, axis: int = -1) -> np.ndarray:
     if current_dim < target_dim:
         pad_width = [(0, 0)] * len(x.shape)
         pad_width[axis] = (0, target_dim - current_dim)
+        if isinstance(x, (jax.Array, jax.core.Tracer)):
+            return jnp.pad(x, pad_width)
         return np.pad(x, pad_width)
     return x
 
