@@ -400,8 +400,8 @@ class Pi0(_model.BaseModel):
             x_t, time, step_rng = carry
             v_t = compute_v_t(x_t, time)
             dist = self._get_sde_dist(x_t, v_t, time, dt, noise_level)
-            step_rng, key = jax.random.split(step_rng)
-            x_next = dist.sample(step_rng)
+            step_rng, sample_key = jax.random.split(step_rng)
+            x_next = dist.sample(seed=sample_key)
             log_prob = dist.log_prob(x_next)
             t_next = time + dt
             out = {
@@ -411,7 +411,7 @@ class Pi0(_model.BaseModel):
                 'time': time,
                 'log_prob': log_prob,
             }
-            return (x_next, t_next, key), out
+            return (x_next, t_next, step_rng), out
 
         def deterministic_step(carry):
             x_t, time = carry
