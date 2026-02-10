@@ -189,8 +189,19 @@ class Pi0(_model.BaseModel):
         noise_level: float = 0.7,
     ) -> tfd.Distribution:
         dt_abs = jnp.abs(dt)
+        # `time` can come in as a scalar from scan carry (sampling path) or as a
+        # per-batch vector (training/logprob path). Normalize it to shape (batch,).
+        time = jnp.asarray(time, dtype=x_t.dtype)
+        if time.ndim == 0:
+            time = jnp.broadcast_to(time, (x_t.shape[0],))
+        else:
+            time = jnp.reshape(time, (-1,))
+            if time.shape[0] != x_t.shape[0]:
+                time = jnp.broadcast_to(time, (x_t.shape[0],))
 
-        time = jnp.clip(time, 0.0, 1 - dt_abs)
+        # keep strictly away from boundaries for stable division in sigma/mean terms
+        eps = jnp.asarray(1e-6, dtype=x_t.dtype)
+        time = jnp.clip(time, eps, 1.0 - dt_abs - eps)
         time = time[:, None, None]  # shape (batch, 1, 1)
 
         sigma_t = noise_level * jnp.sqrt(time / (1 - time))
