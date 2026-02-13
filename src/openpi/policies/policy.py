@@ -6,6 +6,7 @@ from typing import Any, TypeAlias
 import flax
 import flax.traverse_util
 import flax.nnx as nnx
+from flax.core import frozen_dict
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -18,6 +19,19 @@ from openpi.shared import array_typing as at
 from openpi.shared import nnx_utils
 
 BasePolicy: TypeAlias = _base_policy.BasePolicy
+
+
+def _mutable_tree_copy(tree: Any) -> Any:
+    """Return a mutable copy of nested mappings, unfreezing FrozenDict trees."""
+    if isinstance(tree, frozen_dict.FrozenDict):
+        tree = frozen_dict.unfreeze(tree)
+    if isinstance(tree, dict):
+        return {k: _mutable_tree_copy(v) for k, v in tree.items()}
+    if isinstance(tree, list):
+        return [_mutable_tree_copy(v) for v in tree]
+    if isinstance(tree, tuple):
+        return tuple(_mutable_tree_copy(v) for v in tree)
+    return tree
 
 
 class Policy(BasePolicy):
@@ -68,7 +82,7 @@ class Policy(BasePolicy):
 
     def _prepare_inputs(self, obs: dict) -> tuple[dict, int]:
         # Make a copy since transformations may modify the inputs in place.
-        inputs = jax.tree.map(lambda x: x, obs)
+        inputs = _mutable_tree_copy(obs)
         inputs = self._input_transform(inputs)
         # Make a batch and convert to jax.Array.
         if inputs["state"].ndim > 1:
@@ -163,7 +177,7 @@ class Policy(BasePolicy):
     
     @override
     def get_prefix_rep(self, obs: dict):
-        inputs = jax.tree.map(lambda x: x, obs)
+        inputs = _mutable_tree_copy(obs)
         inputs = self._input_transform(inputs)
         inputs = jax.tree.map(lambda x: jnp.asarray(x), inputs)
         # add batch dim and broadcast for keys that are not "images" and "state"
@@ -183,7 +197,7 @@ class Policy(BasePolicy):
 
     @override
     def get_prefix_rep_with_model(self, model: _model.BaseModel,  obs: dict):
-        inputs = jax.tree.map(lambda x: x, obs)
+        inputs = _mutable_tree_copy(obs)
         inputs = self._input_transform(inputs)
         inputs = jax.tree.map(lambda x: jnp.asarray(x), inputs)
         # add batch dim and broadcast for keys that are not "images" and "state"
