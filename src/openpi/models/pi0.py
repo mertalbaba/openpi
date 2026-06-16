@@ -99,6 +99,12 @@ class Pi0(_model.BaseModel):
             self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
+        # SONIC token-VLA: project the previous-token history into prefix tokens
+        # (paligemma width, attended alongside image + language).
+        self.prev_token_history = config.prev_token_history
+        if config.prev_token_history > 0:
+            self.prev_token_proj = nnx.Linear(config.action_dim, paligemma_config.width, rngs=rngs)
+
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
 
@@ -131,6 +137,15 @@ class Pi0(_model.BaseModel):
             input_mask.append(obs.tokenized_prompt_mask)
             # full attention between image and language inputs
             ar_mask += [False] * tokenized_inputs.shape[1]
+
+        # SONIC token-VLA: append the previous-token history (fully-latent conditioning),
+        # attended together with the image + language prefix.
+        if obs.prev_tokens is not None:
+            hist_tokens = self.prev_token_proj(obs.prev_tokens)  # (b, h, paligemma_width)
+            tokens.append(hist_tokens)
+            input_mask.append(jnp.ones(hist_tokens.shape[:2], dtype=jnp.bool_))
+            ar_mask += [False] * hist_tokens.shape[1]
+
         tokens = jnp.concatenate(tokens, axis=1)
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = jnp.array(ar_mask)
@@ -211,7 +226,12 @@ class Pi0(_model.BaseModel):
         )
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-        return jnp.mean(jnp.square(v_t - u_t), axis=-1)
+        loss = jnp.mean(jnp.square(v_t - u_t), axis=-1)  # (*b, ah)
+        # SONIC token-VLA: zero the flow-matching loss on occluded target tokens
+        # (Xperience). Invalid timesteps get 0 loss + 0 gradient.
+        if observation.action_valid is not None:
+            loss = loss * observation.action_valid.astype(loss.dtype)
+        return loss
 
     @override
     def sample_actions(

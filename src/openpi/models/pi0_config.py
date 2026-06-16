@@ -32,6 +32,12 @@ class Pi0Config(_model.BaseModelConfig):
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
 
+    # SONIC token-VLA: if > 0, condition on a `prev_token_history`-length window of previous
+    # action tokens (the fully-latent history), projected into prefix tokens. 0 disables it
+    # (vanilla Pi0/Pi05). When set, the data pipeline must provide obs.prev_tokens and the
+    # per-timestep obs.action_valid mask (occluded targets are excluded from the loss).
+    prev_token_history: int = 0
+
     pytorch_compile_mode: str | None = "max-autotune"
 
     def __post_init__(self):
@@ -80,6 +86,14 @@ class Pi0Config(_model.BaseModelConfig):
                 state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
                 tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
                 tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
+                prev_tokens=(
+                    jax.ShapeDtypeStruct([batch_size, self.prev_token_history, self.action_dim], jnp.float32)
+                    if self.prev_token_history > 0 else None
+                ),
+                action_valid=(
+                    jax.ShapeDtypeStruct([batch_size, self.action_horizon], jnp.bool_)
+                    if self.prev_token_history > 0 else None
+                ),
             )
         action_spec = jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.float32)
 
