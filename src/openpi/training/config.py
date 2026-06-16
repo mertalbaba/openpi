@@ -851,6 +851,10 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi05_sonic",
+        # wandb: project "humanoid-vla"; entity (team) "rlforimitation" is set via the
+        # WANDB_ENTITY env var (openpi's init_wandb doesn't take an entity arg). Run name =
+        # --exp_name (use a pi05_* name).
+        project_name="humanoid-vla",
         model=pi0_config.Pi0Config(
             pi05=True,
             action_dim=64,
