@@ -136,6 +136,10 @@ def create_torch_dataset(
         raise ValueError("Repo ID is not set. Cannot create dataset.")
     if repo_id == "fake":
         return FakeDataset(model_config, num_samples=1024)
+    # Custom datasets (e.g. the SONIC token VLA) build the torch Dataset directly,
+    # bypassing the LeRobot path.
+    if data_config.dataset_factory is not None:
+        return data_config.dataset_factory(action_horizon, model_config)
 
     dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
     dataset = lerobot_dataset.LeRobotDataset(

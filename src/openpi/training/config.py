@@ -20,6 +20,7 @@ import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
+import openpi.policies.sonic_policy as sonic_policy
 import openpi.shared.download as _download
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
@@ -96,6 +97,11 @@ class DataConfig:
     action_space: droid_rlds_dataset.DroidActionSpace | None = None
     # List of datasets to sample from: name, version, weight, and optionally filter_dict_path
     datasets: Sequence[droid_rlds_dataset.RLDSDataset] = ()
+
+    # Optional callable (action_horizon, model_config) -> torch Dataset that builds the training
+    # dataset directly, bypassing the LeRobot path. Used by custom multi-corpus datasets such as
+    # the SONIC token VLA. Not serialized; set only at runtime by a DataConfigFactory.
+    dataset_factory: Any | None = None
 
 
 class GroupFactory(Protocol):
@@ -352,6 +358,83 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class SonicTokenDataConfig(DataConfigFactory):
+    """Fully-latent SONIC token VLA: ego frame + instruction + previous tokens -> [50, 64] chunk.
+
+    Plugs the custom multi-corpus `SonicTokenDataset` (LeVERB + Humanoid Everyday + Xperience)
+    via `DataConfig.dataset_factory`, bypassing the LeRobot path. SONIC tokens are FSQ codes on a
+    discrete grid, so NO normalization is applied (identity) -- the decoder snaps to grid at
+    inference and mean/std would warp it. `model.prev_token_history` must equal `history`."""
+
+    repo_id: str = "sonic"
+    # Root of this repo (so the openpi venv can import the dataset module).
+    repo_root: str = "/home/malbaba/humanoid-vla"
+    # Previous-token history length (must match model.prev_token_history) + sampling stride.
+    history: int = 50
+    history_stride: int = 4
+    history_dropout: float = 0.5
+    min_valid_frac: float = 0.9
+    samples_per_epoch: int = 200_000
+    image_size: int = 224
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        assert isinstance(model_config, pi0_config.Pi0Config)
+        if model_config.prev_token_history != self.history:
+            raise ValueError(
+                f"model.prev_token_history ({model_config.prev_token_history}) must equal "
+                f"data.history ({self.history})."
+            )
+
+        repo_root = self.repo_root
+        history, history_stride = self.history, self.history_stride
+        history_dropout, min_valid_frac = self.history_dropout, self.min_valid_frac
+        samples_per_epoch, image_size = self.samples_per_epoch, self.image_size
+
+        def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
+            import sys
+
+            if repo_root not in sys.path:
+                sys.path.insert(0, repo_root)
+            from pi05_sonic_vla.data.sonic_token_dataset import CorpusSpec, SonicTokenDataset
+
+            corpora = [
+                CorpusSpec("leverb", "lerobot", "/ps/project/datasets/LeVERB_Bench/sonic_vla_50hz", 1.0),
+                CorpusSpec(
+                    "humanoid_everyday", "lerobot",
+                    "/ps/project/datasets/humanoid_everyday/sonic_vla_50hz", 1.0,
+                ),
+                CorpusSpec("xperience", "xperience", "/ps/project/datasets/robo-xperience-10m", 1.0),
+            ]
+            return SonicTokenDataset(
+                corpora,
+                horizon=action_horizon,
+                history=history,
+                history_stride=history_stride,
+                history_dropout=history_dropout,
+                min_valid_frac=min_valid_frac,
+                image_size=image_size,
+                samples_per_epoch=samples_per_epoch,
+            )
+
+        data_transforms = _transforms.Group(
+            inputs=[sonic_policy.SonicTokenInputs(action_dim=model_config.action_dim)],
+            outputs=[sonic_policy.SonicTokenOutputs()],
+        )
+        model_transforms = ModelTransformFactory()(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repo_id=self.repo_id,
+            norm_stats={},  # FSQ tokens -> identity (no normalization)
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            dataset_factory=dataset_factory,
+            use_quantile_norm=False,
         )
 
 
@@ -760,6 +843,38 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
+    ),
+    #
+    # SONIC token-predicting VLA (fully-latent pi0.5: ego frame + instruction + prev tokens
+    # -> [50, 64] SONIC token chunk). action_dim = 64 (FSQ token), no normalization, masked
+    # loss on occluded Xperience targets. prev_token_history MUST equal data.history.
+    #
+    TrainConfig(
+        name="pi05_sonic",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=64,
+            action_horizon=50,
+            prev_token_history=50,
+            discrete_state_input=False,
+        ),
+        data=SonicTokenDataConfig(repo_id="sonic", history=50),
+        batch_size=128,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000,
+            peak_lr=5e-5,
+            decay_steps=200_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        # pi0.5 base PaliGemma + SigLIP weights; resized action projections + prev_token_proj
+        # are left at fresh init (see SonicCheckpointWeightLoader).
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
     ),
     #
     # Fine-tuning Aloha configs.

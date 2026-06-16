@@ -106,9 +106,10 @@ class Observation(Generic[ArrayT]):
     # Token loss mask (for FAST autoregressive model).
     token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
-    # SONIC token-VLA: fully-latent previous-token history (h tokens, each action_dim)
+    # SONIC token-VLA: fully-latent previous-token history (ph tokens, each action_dim ad)
     # and a per-timestep action-validity mask (occluded targets -> excluded from loss).
-    prev_tokens: at.Float[ArrayT, "*b h ad"] | None = None
+    # NB: axis name `ph` (not `h`) avoids colliding with the image-height axis `h`.
+    prev_tokens: at.Float[ArrayT, "*b ph ad"] | None = None
     action_valid: at.Bool[ArrayT, "*b ah"] | None = None
 
     @classmethod
