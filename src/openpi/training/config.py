@@ -859,7 +859,12 @@ _CONFIGS = [
             discrete_state_input=False,
         ),
         data=SonicTokenDataConfig(repo_id="sonic", history=50),
-        batch_size=128,
+        # Conservative 8-GPU defaults: 2-way FSDP shards the ~3B model + optimizer state so it
+        # fits comfortably; batch_size must stay divisible by the device count. Raise batch_size
+        # / lower fsdp_devices if memory allows (e.g. --fsdp_devices=1 --batch_size=128), or shard
+        # harder on fewer/smaller GPUs (e.g. --fsdp_devices=4 --batch_size=64).
+        batch_size=64,
+        fsdp_devices=2,
         lr_schedule=_optimizer.CosineDecaySchedule(
             warmup_steps=2_000,
             peak_lr=5e-5,
