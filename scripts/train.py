@@ -247,6 +247,40 @@ def main(config: _config.TrainConfig):
         donate_argnums=(1,),
     )
 
+    # Held-out token-prediction eval (optional). Builds an "eval"-split loader and a jitted
+    # sample_actions that mirrors ptrain_step's shardings; logs eval/* metrics to wandb.
+    eval_loader = None
+    run_token_eval = None
+    eval_rng = jax.random.key(config.seed + 1)
+    if config.eval_interval > 0 and hasattr(config.data, "split"):
+        import sys as _sys
+
+        repo_root = getattr(config.data, "repo_root", None)
+        if repo_root and repo_root not in _sys.path:
+            _sys.path.insert(0, repo_root)
+        from pi05_sonic_vla.eval.token_metrics import run_token_eval
+
+        eval_config = dataclasses.replace(
+            config,
+            data=dataclasses.replace(config.data, split="eval", history_dropout=0.0),
+            num_workers=min(config.num_workers, 4),
+        )
+        eval_loader = _data_loader.create_data_loader(
+            eval_config, sharding=data_sharding, shuffle=False, num_batches=config.eval_batches
+        )
+
+        def _eval_sample(rng, state, observation):
+            m = nnx.merge(state.model_def, state.ema_params if state.ema_params is not None else state.params)
+            m.eval()
+            return m.sample_actions(rng, observation, num_steps=10)
+
+        peval = jax.jit(
+            _eval_sample,
+            in_shardings=(replicated_sharding, train_state_sharding, data_sharding),
+            out_shardings=replicated_sharding,
+        )
+        logging.info(f"Held-out eval enabled: every {config.eval_interval} steps, {config.eval_batches} batches.")
+
     start_step = int(train_state.step)
     pbar = tqdm.tqdm(
         range(start_step, config.num_train_steps),
@@ -267,6 +301,15 @@ def main(config: _config.TrainConfig):
             pbar.write(f"Step {step}: {info_str}")
             wandb.log(reduced_info, step=step)
             infos = []
+
+        if eval_loader is not None and step % config.eval_interval == 0:
+            with sharding.set_mesh(mesh):
+                eval_metrics = run_token_eval(peval, eval_loader, train_state, eval_rng, config.eval_batches)
+            if eval_metrics:
+                em = ", ".join(f"{k}={v:.4f}" for k, v in eval_metrics.items() if isinstance(v, float))
+                pbar.write(f"Step {step} [eval]: {em}")
+                wandb.log({f"eval/{k}": v for k, v in eval_metrics.items()}, step=step)
+
         batch = next(data_iter)
 
         if (step % config.save_interval == 0 and step > start_step) or step == config.num_train_steps - 1:

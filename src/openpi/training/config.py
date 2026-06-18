@@ -380,6 +380,9 @@ class SonicTokenDataConfig(DataConfigFactory):
     min_valid_frac: float = 0.9
     samples_per_epoch: int = 200_000
     image_size: int = 224
+    # Held-out split: "train" excludes the HE eval holdout, "eval" is HE-only holdout,
+    # "all" uses everything. The eval loader is built by replacing split -> "eval".
+    split: str = "all"
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -393,7 +396,7 @@ class SonicTokenDataConfig(DataConfigFactory):
         repo_root = self.repo_root
         history, history_stride = self.history, self.history_stride
         history_dropout, min_valid_frac = self.history_dropout, self.min_valid_frac
-        samples_per_epoch, image_size = self.samples_per_epoch, self.image_size
+        samples_per_epoch, image_size, split = self.samples_per_epoch, self.image_size, self.split
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
@@ -419,6 +422,7 @@ class SonicTokenDataConfig(DataConfigFactory):
                 min_valid_frac=min_valid_frac,
                 image_size=image_size,
                 samples_per_epoch=samples_per_epoch,
+                split=split,
             )
 
         data_transforms = _transforms.Group(
@@ -599,6 +603,12 @@ class TrainConfig:
     save_interval: int = 1000
     # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
     keep_period: int | None = 5000
+
+    # Held-out eval (token-prediction metrics via sample_actions). 0 disables it. Requires the
+    # data config to support a "split" (e.g. SonicTokenDataConfig) so an eval loader can be built.
+    eval_interval: int = 0
+    # Number of eval batches to average per eval.
+    eval_batches: int = 8
 
     # If true, will overwrite the checkpoint directory if it already exists.
     overwrite: bool = False
@@ -862,7 +872,9 @@ _CONFIGS = [
             prev_token_history=50,
             discrete_state_input=False,
         ),
-        data=SonicTokenDataConfig(repo_id="sonic", history=50),
+        # split="train" holds out ~5% of Humanoid Everyday for eval (the in-loop token eval
+        # builds an "eval" loader from the same config).
+        data=SonicTokenDataConfig(repo_id="sonic", history=50, split="train"),
         # Conservative 8-GPU defaults: 2-way FSDP shards the ~3B model + optimizer state so it
         # fits comfortably; batch_size must stay divisible by the device count. Raise batch_size
         # / lower fsdp_devices if memory allows (e.g. --fsdp_devices=1 --batch_size=128), or shard
@@ -884,6 +896,9 @@ _CONFIGS = [
         ),
         num_workers=8,
         num_train_steps=200_000,
+        # Held-out HE token-prediction eval -> wandb (eval/token_mse, eval/token_cos, ...).
+        eval_interval=500,
+        eval_batches=8,
     ),
     #
     # Fine-tuning Aloha configs.
