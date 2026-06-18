@@ -5,6 +5,7 @@ from collections.abc import Sequence
 import dataclasses
 import difflib
 import logging
+import os
 import pathlib
 from typing import Any, Literal, Protocol, TypeAlias
 
@@ -372,7 +373,8 @@ class SonicTokenDataConfig(DataConfigFactory):
 
     repo_id: str = "sonic"
     # Root of this repo (so the openpi venv can import the dataset module).
-    repo_root: str = "/home/malbaba/humanoid-vla"
+    # Overridable via SONIC_REPO_ROOT for non-cluster hosts; default = cluster path.
+    repo_root: str = os.environ.get("SONIC_REPO_ROOT", "/home/malbaba/humanoid-vla")
     # Previous-token history length (must match model.prev_token_history) + sampling stride.
     history: int = 50
     history_stride: int = 4
@@ -406,16 +408,20 @@ class SonicTokenDataConfig(DataConfigFactory):
                 sys.path.insert(0, repo_root)
             from pi05_sonic_vla.data.sonic_token_dataset import CorpusSpec, SonicTokenDataset
 
+            # Corpus roots + index cache dir are overridable via env for non-cluster
+            # hosts; defaults = cluster paths so condor runs are unchanged.
             corpora = [
-                CorpusSpec("leverb", "lerobot", "/ps/project/datasets/LeVERB_Bench/sonic_vla_50hz", 1.0),
-                CorpusSpec(
-                    "humanoid_everyday", "lerobot",
-                    "/ps/project/datasets/humanoid_everyday/sonic_vla_50hz", 1.0,
-                ),
-                CorpusSpec("xperience", "xperience", "/ps/project/datasets/robo-xperience-10m", 1.0),
+                CorpusSpec("leverb", "lerobot",
+                           os.environ.get("SONIC_LEVERB_ROOT",
+                                          "/ps/project/datasets/LeVERB_Bench/sonic_vla_50hz"), 1.0),
+                CorpusSpec("humanoid_everyday", "lerobot",
+                           os.environ.get("SONIC_HE_ROOT",
+                                          "/ps/project/datasets/humanoid_everyday/sonic_vla_50hz"), 1.0),
+                CorpusSpec("xperience", "xperience",
+                           os.environ.get("SONIC_XPERIENCE_ROOT",
+                                          "/ps/project/datasets/robo-xperience-10m"), 1.0),
             ]
-            return SonicTokenDataset(
-                corpora,
+            kwargs = dict(
                 horizon=action_horizon,
                 history=history,
                 history_stride=history_stride,
@@ -425,6 +431,10 @@ class SonicTokenDataConfig(DataConfigFactory):
                 samples_per_epoch=samples_per_epoch,
                 split=split,
             )
+            index_dir = os.environ.get("SONIC_INDEX_DIR")
+            if index_dir:
+                kwargs["cache_dir"] = index_dir
+            return SonicTokenDataset(corpora, **kwargs)
 
         data_transforms = _transforms.Group(
             inputs=[sonic_policy.SonicTokenInputs(action_dim=model_config.action_dim)],
