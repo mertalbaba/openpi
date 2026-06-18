@@ -380,7 +380,8 @@ class SonicTokenDataConfig(DataConfigFactory):
     min_valid_frac: float = 0.9
     samples_per_epoch: int = 200_000
     image_size: int = 224
-    # Held-out split: "train" excludes the HE eval holdout, "eval" is HE-only holdout,
+    # Held-out split: "train" excludes both HE holdouts (the ~5% random `eval` and the
+    # `test_locomotion` Locomanip slice); "eval"/"test_locomotion" keep only their slice;
     # "all" uses everything. The eval loader is built by replacing split -> "eval".
     split: str = "all"
 
