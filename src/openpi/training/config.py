@@ -956,6 +956,58 @@ _CONFIGS = [
         eval_interval=500,
         eval_batches=8,
     ),
+    # FINETUNE: warm-start from a trained SONIC checkpoint (set SONIC_FT_INIT=.../<step>/params;
+    # defaults to pi05_base so the config is valid without it) and train on HE ONLY (LeVERB +
+    # Xperience dropped). Held-out HE eval/test_locomotion unchanged. 50k steps, save every 5k.
+    # Tests: what happens fine-tuning the joint policy on teleop data only.
+    TrainConfig(
+        name="pi05_sonic_he_ft",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(pi05=True, action_dim=64, action_horizon=50,
+                                   prev_token_history=50, discrete_state_input=False),
+        data=SonicTokenDataConfig(repo_id="sonic", history=50, split="train", test_frac=0.15,
+                                  train_exclude_corpora=("leverb", "xperience")),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=50_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=50_000,
+        save_interval=5_000,
+        eval_interval=500,
+        eval_batches=8,
+    ),
+    # Ablation: NO Xperience in training (HE + LeVERB only) -> tests whether the egocentric human
+    # data helps. From-scratch by default (200k, vs the full HE+LeVERB+Xperience run); set
+    # SONIC_FT_INIT + --num_train_steps to run it as a finetune instead. Held-out HE sets unchanged.
+    TrainConfig(
+        name="pi05_sonic_noxp",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(pi05=True, action_dim=64, action_horizon=50,
+                                   prev_token_history=50, discrete_state_input=False),
+        data=SonicTokenDataConfig(repo_id="sonic", history=50, split="train", test_frac=0.15,
+                                  train_exclude_corpora=("xperience",)),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=200_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
+        eval_interval=500,
+        eval_batches=8,
+    ),
     #
     # Fine-tuning Aloha configs.
     #
