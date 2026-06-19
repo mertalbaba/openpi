@@ -386,6 +386,13 @@ class SonicTokenDataConfig(DataConfigFactory):
     # `test_locomotion` Locomanip slice); "eval"/"test_locomotion" keep only their slice;
     # "all" uses everything. The eval loader is built by replacing split -> "eval".
     split: str = "all"
+    # Held-out locomotion TEST set: `test_frac` of HE `test_category` episodes (disjoint from
+    # the random `eval` band), excluded from "train", evaluated post-training via split=test_locomotion.
+    test_frac: float = 0.12
+    test_category: str = "Locomanip"
+    # Corpora dropped from the TRAIN split only (eval/test still use them). e.g. ("humanoid_everyday",)
+    # ablates HE from training while keeping the HE eval + test_locomotion sets identical.
+    train_exclude_corpora: tuple[str, ...] = ()
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -400,6 +407,8 @@ class SonicTokenDataConfig(DataConfigFactory):
         history, history_stride = self.history, self.history_stride
         history_dropout, min_valid_frac = self.history_dropout, self.min_valid_frac
         samples_per_epoch, image_size, split = self.samples_per_epoch, self.image_size, self.split
+        test_frac, test_category = self.test_frac, self.test_category
+        train_exclude_corpora = self.train_exclude_corpora
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
@@ -430,6 +439,9 @@ class SonicTokenDataConfig(DataConfigFactory):
                 image_size=image_size,
                 samples_per_epoch=samples_per_epoch,
                 split=split,
+                test_frac=test_frac,
+                test_category=test_category,
+                train_exclude_corpora=train_exclude_corpora,
             )
             index_dir = os.environ.get("SONIC_INDEX_DIR")
             if index_dir:
@@ -885,7 +897,7 @@ _CONFIGS = [
         ),
         # split="train" holds out ~5% of Humanoid Everyday for eval (the in-loop token eval
         # builds an "eval" loader from the same config).
-        data=SonicTokenDataConfig(repo_id="sonic", history=50, split="train"),
+        data=SonicTokenDataConfig(repo_id="sonic", history=50, split="train", test_frac=0.15),
         # Conservative 8-GPU defaults: 2-way FSDP shards the ~3B model + optimizer state so it
         # fits comfortably; batch_size must stay divisible by the device count. Raise batch_size
         # / lower fsdp_devices if memory allows (e.g. --fsdp_devices=1 --batch_size=128), or shard
@@ -908,6 +920,39 @@ _CONFIGS = [
         num_workers=8,
         num_train_steps=200_000,
         # Held-out HE token-prediction eval -> wandb (eval/token_mse, eval/token_cos, ...).
+        eval_interval=500,
+        eval_batches=8,
+    ),
+    # Ablation of the above: identical, but HE is DROPPED from training (LeVERB + Xperience only).
+    # The HE eval (~5%) + test_locomotion (15% Locomanip) holdouts are unchanged, so the two runs
+    # are evaluated on the exact same held-out HE sets.
+    TrainConfig(
+        name="pi05_sonic_noHE",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=64,
+            action_horizon=50,
+            prev_token_history=50,
+            discrete_state_input=False,
+        ),
+        data=SonicTokenDataConfig(repo_id="sonic", history=50, split="train", test_frac=0.15,
+                                  train_exclude_corpora=("humanoid_everyday",)),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000,
+            peak_lr=5e-5,
+            decay_steps=200_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
         eval_interval=500,
         eval_batches=8,
     ),
