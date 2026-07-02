@@ -393,6 +393,12 @@ class SonicTokenDataConfig(DataConfigFactory):
     # Corpora dropped from the TRAIN split only (eval/test still use them). e.g. ("humanoid_everyday",)
     # ablates HE from training while keeping the HE eval + test_locomotion sets identical.
     train_exclude_corpora: tuple[str, ...] = ()
+    # v2 (proprio) mode: True -> 5-corpus mix (HE-locomanip + PSI + UnifoLM + LeVERB + Xperience) with
+    # per-episode proprio sidecars; the 32-D state is normalized (quantile -> [-1,1]) and fed via the
+    # model's discrete_state_input. False (default) -> the original fully-latent 3-corpus setup.
+    use_proprio: bool = False
+    # per-corpus sampling fractions when use_proprio (None -> DEFAULT_MIX); e.g. all-0.2 for uniform.
+    weights: dict[str, float] | None = None
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -409,27 +415,32 @@ class SonicTokenDataConfig(DataConfigFactory):
         samples_per_epoch, image_size, split = self.samples_per_epoch, self.image_size, self.split
         test_frac, test_category = self.test_frac, self.test_category
         train_exclude_corpora = self.train_exclude_corpora
+        use_proprio, weights = self.use_proprio, self.weights
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
 
             if repo_root not in sys.path:
                 sys.path.insert(0, repo_root)
-            from pi05_sonic_vla.data.sonic_token_dataset import CorpusSpec, SonicTokenDataset
+            from pi05_sonic_vla.data.sonic_token_dataset import (
+                CorpusSpec, SonicTokenDataset, default_corpora)
 
-            # Corpus roots + index cache dir are overridable via env for non-cluster
-            # hosts; defaults = cluster paths so condor runs are unchanged.
-            corpora = [
-                CorpusSpec("leverb", "lerobot",
-                           os.environ.get("SONIC_LEVERB_ROOT",
-                                          "/ps/project/datasets/LeVERB_Bench/sonic_vla_50hz"), 1.0),
-                CorpusSpec("humanoid_everyday", "lerobot",
-                           os.environ.get("SONIC_HE_ROOT",
-                                          "/ps/project/datasets/humanoid_everyday/sonic_vla_50hz"), 1.0),
-                CorpusSpec("xperience", "xperience",
-                           os.environ.get("SONIC_XPERIENCE_ROOT",
-                                          "/ps/project/datasets/robo-xperience-10m"), 1.0),
-            ]
+            # v2: 5-corpus mix with proprio sidecars (box-default paths, env-overridable). v1: the
+            # original fully-latent 3-corpus setup (cluster-default paths, env-overridable).
+            if use_proprio:
+                corpora = default_corpora(weights)
+            else:
+                corpora = [
+                    CorpusSpec("leverb", "lerobot",
+                               os.environ.get("SONIC_LEVERB_ROOT",
+                                              "/ps/project/datasets/LeVERB_Bench/sonic_vla_50hz"), 1.0),
+                    CorpusSpec("humanoid_everyday", "lerobot",
+                               os.environ.get("SONIC_HE_ROOT",
+                                              "/ps/project/datasets/humanoid_everyday/sonic_vla_50hz"), 1.0),
+                    CorpusSpec("xperience", "xperience",
+                               os.environ.get("SONIC_XPERIENCE_ROOT",
+                                              "/ps/project/datasets/robo-xperience-10m"), 1.0),
+                ]
             kwargs = dict(
                 horizon=action_horizon,
                 history=history,
@@ -454,14 +465,23 @@ class SonicTokenDataConfig(DataConfigFactory):
         )
         model_transforms = ModelTransformFactory()(model_config)
 
+        base = self.create_base_config(assets_dirs, model_config)
+        # v2: normalize the 32-D state (quantile -> [-1,1], required by the discrete state tokenizer);
+        # keep tokens (actions) UNnormalized (FSQ identity). v1: identity for everything.
+        # base.norm_stats is loaded from assets (empty until compute_norm_stats runs, which is fine).
+        norm_stats = (
+            {"state": base.norm_stats["state"]}
+            if (use_proprio and base.norm_stats and "state" in base.norm_stats)
+            else {}
+        )
         return dataclasses.replace(
-            self.create_base_config(assets_dirs, model_config),
+            base,
             repo_id=self.repo_id,
-            norm_stats={},  # FSQ tokens -> identity (no normalization)
+            norm_stats=norm_stats,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
             dataset_factory=dataset_factory,
-            use_quantile_norm=False,
+            use_quantile_norm=use_proprio,
         )
 
 
@@ -920,6 +940,68 @@ _CONFIGS = [
         num_workers=8,
         num_train_steps=200_000,
         # Held-out HE token-prediction eval -> wandb (eval/token_mse, eval/token_cos, ...).
+        eval_interval=500,
+        eval_batches=8,
+    ),
+    #
+    # v2 SONIC VLA: + PROPRIO + 5 corpora + 4 s/0.4 s (10-token) history.
+    # Adds PSI-Real + UnifoLM-WBT; HE restricted to Locomanip; 32-D state (q_dev(29)+gravity(3)) fed
+    # via discrete_state_input (normalized to [-1,1]). Default mix HE .08 / PSI .08 / UnifoLM .11 /
+    # LeVERB .08 / Xperience .65. RUN compute_norm_stats BEFORE training (computes the state stats).
+    #
+    TrainConfig(
+        name="pi05_sonic_proprio",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_dim=64,
+            action_horizon=50,
+            prev_token_history=10,
+            discrete_state_input=True,
+        ),
+        data=SonicTokenDataConfig(repo_id="sonic_proprio", history=10, history_stride=20,
+                                  split="train", test_frac=0.15, use_proprio=True),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=200_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
+        eval_interval=500,
+        eval_batches=8,
+    ),
+    # Same as pi05_sonic_proprio but UNIFORM corpus sampling (all 0.20) -> ablates the mix ratios.
+    TrainConfig(
+        name="pi05_sonic_proprio_uniform",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=64, action_horizon=50,
+            prev_token_history=10, discrete_state_input=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_proprio_uniform", history=10, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True,
+            weights={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                     "leverb": 0.2, "xperience": 0.2},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=200_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
         eval_interval=500,
         eval_batches=8,
     ),

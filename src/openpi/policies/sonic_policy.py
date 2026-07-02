@@ -41,8 +41,10 @@ class SonicTokenInputs(transforms.DataTransformFn):
         image = _parse_image(data["image"])
         zeros_img = np.zeros_like(image)
         inputs = {
-            # Unused placeholder (pi0.5 + discrete_state_input=False); PadStatesAndActions needs it.
-            "state": np.zeros((self.action_dim,), dtype=np.float32),
+            # 32-D proprio (q_dev(29) + gravity(3)) when a proprio source is present; used by pi0.5
+            # only if discrete_state_input=True (tokenized into the prompt). Fully-latent configs
+            # (discrete_state_input=False) still receive it but the model ignores it. Fallback = zeros.
+            "state": np.asarray(data.get("state", np.zeros(32, np.float32)), dtype=np.float32),
             "image": {
                 "base_0_rgb": image,
                 "left_wrist_0_rgb": zeros_img,
