@@ -1005,6 +1005,65 @@ _CONFIGS = [
         eval_interval=500,
         eval_batches=8,
     ),
+    #
+    # ZERO-HISTORY (leak-free) variants: identical to pi05_sonic_proprio{,_uniform} but with NO
+    # prev-token conditioning (prev_token_history=0, history=0). Motivation: a SONIC token encodes
+    # ~1 s of FUTURE motion, so "past" tokens at 0.4 s spacing leak ~60% of the target chunk ->
+    # copy-forward training, inflated offline eval, and a stand-still attractor at deployment.
+    # Same repo_id as the proprio configs -> reuses their computed state norm stats.
+    #
+    TrainConfig(
+        name="pi05_sonic_proprio_nohist",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=64, action_horizon=50,
+            prev_token_history=0, discrete_state_input=True,
+        ),
+        data=SonicTokenDataConfig(repo_id="sonic_proprio", history=0, history_stride=20,
+                                  split="train", test_frac=0.15, use_proprio=True),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=200_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
+        eval_interval=500,
+        eval_batches=8,
+    ),
+    TrainConfig(
+        name="pi05_sonic_proprio_uniform_nohist",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=64, action_horizon=50,
+            prev_token_history=0, discrete_state_input=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_proprio_uniform", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True,
+            weights={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                     "leverb": 0.2, "xperience": 0.2},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=200_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=200_000,
+        eval_interval=500,
+        eval_batches=8,
+    ),
     # Ablation of the above: identical, but HE is DROPPED from training (LeVERB + Xperience only).
     # The HE eval (~5%) + test_locomotion (15% Locomanip) holdouts are unchanged, so the two runs
     # are evaluated on the exact same held-out HE sets.

@@ -55,9 +55,14 @@ class SonicTokenInputs(transforms.DataTransformFn):
                 "left_wrist_0_rgb": np.False_,
                 "right_wrist_0_rgb": np.False_,
             },
-            # Fully-latent history (raw FSQ tokens; projected into the prefix by the model).
-            "prev_tokens": np.asarray(data["prev_tokens"], dtype=np.float32),
         }
+        # Previous-token history (raw FSQ tokens; projected into the prefix by the model).
+        # Zero-history configs (prev_token_history=0, the leak-free variant) emit an empty
+        # (0, 64) array -- omit the key so Observation.prev_tokens stays None and the model
+        # takes the vanilla pi0.5 path (no prev_token_proj exists in that case).
+        prev = np.asarray(data.get("prev_tokens", np.zeros((0, 64))), dtype=np.float32)
+        if prev.shape[0] > 0:
+            inputs["prev_tokens"] = prev
         # Targets are only present during training.
         if "target_tokens" in data:
             inputs["actions"] = np.asarray(data["target_tokens"], dtype=np.float32)
