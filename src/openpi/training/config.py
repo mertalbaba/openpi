@@ -474,6 +474,15 @@ class SonicTokenDataConfig(DataConfigFactory):
             if (use_proprio and base.norm_stats and "state" in base.norm_stats)
             else {}
         )
+        if use_proprio and not norm_stats:
+            # Assets are keyed by CONFIG NAME (assets/<config.name>/<repo_id>/), so a derived config
+            # does NOT inherit its sibling's stats. Training like this feeds RAW state to the [-1,1]
+            # digitizer (clips large q_dev) -- the pi05_*_nohist 0709 runs shipped with this bug.
+            logging.warning(
+                "use_proprio=True but NO 'state' norm stats found for repo_id=%s -- the model will "
+                "train/serve on RAW state. This is a BUG unless compute_norm_stats is running right "
+                "now. Populate assets/<config_name>/%s/norm_stats.json.", self.repo_id, self.repo_id
+            )
         return dataclasses.replace(
             base,
             repo_id=self.repo_id,
@@ -1010,7 +1019,10 @@ _CONFIGS = [
     # prev-token conditioning (prev_token_history=0, history=0). Motivation: a SONIC token encodes
     # ~1 s of FUTURE motion, so "past" tokens at 0.4 s spacing leak ~60% of the target chunk ->
     # copy-forward training, inflated offline eval, and a stand-still attractor at deployment.
-    # Same repo_id as the proprio configs -> reuses their computed state norm stats.
+    # NOTE: norm-stats assets are keyed by CONFIG NAME (assets/<name>/<repo_id>/), NOT repo_id --
+    # the 0709 nohist runs trained WITHOUT state stats (raw-state digitize; see DEPLOY.md). The
+    # nohist assets dirs are populated now (copied from the proprio siblings, 0716), so future
+    # runs of these configs get normalized state -- NOT comparable to the 0709 checkpoints.
     #
     TrainConfig(
         name="pi05_sonic_proprio_nohist",
