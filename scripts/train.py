@@ -143,19 +143,36 @@ def train_step(
     model = nnx.merge(state.model_def, state.params)
     model.train()
 
-    @at.typecheck
-    def loss_fn(
-        model: _model.BaseModel, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions
-    ):
-        chunked_loss = model.compute_loss(rng, observation, actions, train=True)
-        return jnp.mean(chunked_loss)
+    # config is static under the jit(partial(train_step, config)) -- branching on it is free.
+    groups = config.loss_dim_groups
+    if groups:
+        # body+hand SONIC VLA: also log per-dim-group losses (mask-normalized means).
+        def loss_fn(
+            model: _model.BaseModel, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions
+        ):
+            chunked_loss, (pd_err, pd_mask) = model.compute_loss(
+                rng, observation, actions, train=True, return_per_dim=True
+            )
+            aux = {
+                f"loss_{name}": pd_err[..., s:e].sum() / jnp.maximum(pd_mask[..., s:e].sum(), 1.0)
+                for name, (s, e) in groups.items()
+            }
+            return jnp.mean(chunked_loss), aux
+    else:
+        @at.typecheck
+        def loss_fn(
+            model: _model.BaseModel, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions
+        ):
+            chunked_loss = model.compute_loss(rng, observation, actions, train=True)
+            return jnp.mean(chunked_loss), {}
 
     train_rng = jax.random.fold_in(rng, state.step)
     observation, actions = batch
 
     # Filter out frozen params.
     diff_state = nnx.DiffState(0, config.trainable_filter)
-    loss, grads = nnx.value_and_grad(loss_fn, argnums=diff_state)(model, train_rng, observation, actions)
+    (loss, aux), grads = nnx.value_and_grad(loss_fn, argnums=diff_state, has_aux=True)(
+        model, train_rng, observation, actions)
 
     params = state.params.filter(config.trainable_filter)
     updates, new_opt_state = state.tx.update(grads, state.opt_state, params)
@@ -185,6 +202,7 @@ def train_step(
     )
     info = {
         "loss": loss,
+        **aux,
         "grad_norm": optax.global_norm(grads),
         "param_norm": optax.global_norm(kernel_params),
     }
@@ -304,7 +322,8 @@ def main(config: _config.TrainConfig):
 
         if eval_loader is not None and step % config.eval_interval == 0:
             with sharding.set_mesh(mesh):
-                eval_metrics = run_token_eval(peval, eval_loader, train_state, eval_rng, config.eval_batches)
+                eval_metrics = run_token_eval(peval, eval_loader, train_state, eval_rng, config.eval_batches,
+                                              dim_groups=config.loss_dim_groups)
             if eval_metrics:
                 em = ", ".join(f"{k}={v:.4f}" for k, v in eval_metrics.items() if isinstance(v, float))
                 pbar.write(f"Step {step} [eval]: {em}")

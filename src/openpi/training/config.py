@@ -399,6 +399,15 @@ class SonicTokenDataConfig(DataConfigFactory):
     use_proprio: bool = False
     # per-corpus sampling fractions when use_proprio (None -> DEFAULT_MIX); e.g. all-0.2 for uniform.
     weights: dict[str, float] | None = None
+    # body+hand mode: targets become (50, 128) = body(64) ++ hand(64) with per-dim validity
+    # (LeVERB has no hand sidecar -> its hand dims are loss-masked). Requires
+    # model.action_dim=128 and model.use_action_dim_valid=True.
+    use_hand: bool = False
+    # hand-state input (bhs): append the 1s-LAGGED hand token to the state -> (96,). Leak-free
+    # (strictly-past window) and sensor-encodable at deploy. Needs model.max_token_len ~300
+    # (96 digitized state values in the pi0.5 prompt). Own repo_id/stats: state is 96-d.
+    use_hand_state: bool = False
+    hand_state_dropout: float = 0.5
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -416,6 +425,8 @@ class SonicTokenDataConfig(DataConfigFactory):
         test_frac, test_category = self.test_frac, self.test_category
         train_exclude_corpora = self.train_exclude_corpora
         use_proprio, weights = self.use_proprio, self.weights
+        use_hand = self.use_hand
+        use_hand_state, hand_state_dropout = self.use_hand_state, self.hand_state_dropout
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
@@ -453,6 +464,9 @@ class SonicTokenDataConfig(DataConfigFactory):
                 test_frac=test_frac,
                 test_category=test_category,
                 train_exclude_corpora=train_exclude_corpora,
+                use_hand=use_hand,
+                use_hand_state=use_hand_state,
+                hand_state_dropout=hand_state_dropout,
             )
             index_dir = os.environ.get("SONIC_INDEX_DIR")
             if index_dir:
@@ -460,7 +474,10 @@ class SonicTokenDataConfig(DataConfigFactory):
             return SonicTokenDataset(corpora, **kwargs)
 
         data_transforms = _transforms.Group(
-            inputs=[sonic_policy.SonicTokenInputs(action_dim=model_config.action_dim)],
+            inputs=[sonic_policy.SonicTokenInputs(
+                action_dim=model_config.action_dim,
+                state_dim=32 + (64 if self.use_hand_state else 0),
+            )],
             outputs=[sonic_policy.SonicTokenOutputs()],
         )
         model_transforms = ModelTransformFactory()(model_config)
@@ -661,6 +678,11 @@ class TrainConfig:
     eval_interval: int = 0
     # Number of eval batches to average per eval.
     eval_batches: int = 8
+
+    # Per-dim-group train/eval loss logging, e.g. {"body": (0, 64), "hand": (64, 128)} -> wandb
+    # keys loss_body / loss_hand (+ eval/token_*_body / _hand). None (default) -> today's
+    # behavior exactly: no aux computation, no extra keys. (body+hand SONIC VLA)
+    loss_dim_groups: dict[str, tuple[int, int]] | None = None
 
     # If true, will overwrite the checkpoint directory if it already exists.
     overwrite: bool = False
@@ -1075,6 +1097,117 @@ _CONFIGS = [
         num_train_steps=200_000,
         eval_interval=500,
         eval_batches=8,
+    ),
+    #
+    # BODY+HAND (bh): action = [50, 128] = body SONIC(64) ++ hand SONIC(64), single flow head,
+    # nohist (hand tokens encode ~1 s of FUTURE motion too -- same leak). LeVERB has no hand
+    # data: its hand dims are loss-masked via action_dim_valid (zero loss, zero gradient).
+    # Curriculum (two phases, fresh optimizer + schedule each):
+    #   phase 1 `pi05_sonic_bh_xp`      100k steps, training = 100% Xperience (other 4 corpora
+    #     excluded from the TRAIN split only; weights stay uniform so the HE eval/test holdouts
+    #     renormalize cleanly and are byte-identical across phases). Warm-start pi05_base
+    #     (action projections 64->128 fresh-init by the loader).
+    #   phase 2 `pi05_sonic_bh_uniform` 50k steps, uniform all-5 mix. Warm-start = phase-1
+    #     checkpoint: SONIC_BH_PHASE1_INIT=.../pi05_sonic_bh_xp/<exp>/<step>/params.
+    # State norm stats: ONE fixed set for BOTH phases (computed on the uniform mix); populate
+    # assets/pi05_sonic_bh_xp/sonic_bh/ AND assets/pi05_sonic_bh_uniform/sonic_bh/ before launch.
+    #
+    TrainConfig(
+        name="pi05_sonic_bh_xp",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bh", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True,
+            weights={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                     "leverb": 0.2, "xperience": 0.2},
+            train_exclude_corpora=("humanoid_everyday", "psi", "unifolm_wbt", "leverb"),
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=100_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=100_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    TrainConfig(
+        name="pi05_sonic_bh_uniform",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bh", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True,
+            weights={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                     "leverb": 0.2, "xperience": 0.2},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        # finetune-style schedule (halved peak, mirrors pi05_sonic_he_ft); fresh per-phase.
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=50_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_BH_PHASE1_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=50_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # BHS: bh + HAND-STATE input (XL-VLA-style latent proprio). state (96,) = q_dev(29) +
+    # gravity(3) + hand_token[t-50] (the 1s-LAGGED hand token: strictly-past window ->
+    # leak-free; sensor-encodable at deploy -> no policy-output momentum). hand_state_dropout
+    # 0.5 keeps the vision pathway alive. max_token_len=448: each digitized state value costs
+    # ~2.7 sentencepiece tokens, so 96 values + long captions measure ~370-400 (32-state
+    # configs already truncated at 200/204). SINGLE-STAGE, weighted
+    # DEFAULT_MIX (first-trial speed; no curriculum). Own repo_id "sonic_bhs" -> 96-d state
+    # stats REQUIRED under assets/pi05_sonic_bhs_weighted/sonic_bhs/ before launch; after
+    # compute, PATCH hand dims (32:96) to q01=-1, q99=+1 so the quantile transform is
+    # identity on FSQ values (body dims stay quantile-normalized).
+    TrainConfig(
+        name="pi05_sonic_bhs_weighted",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=448,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=150_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=150_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
     ),
     # Ablation of the above: identical, but HE is DROPPED from training (LeVERB + Xperience only).
     # The HE eval (~5%) + test_locomotion (15% Locomanip) holdouts are unchanged, so the two runs

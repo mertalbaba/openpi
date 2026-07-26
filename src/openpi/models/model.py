@@ -111,6 +111,9 @@ class Observation(Generic[ArrayT]):
     # NB: axis name `ph` (not `h`) avoids colliding with the image-height axis `h`.
     prev_tokens: at.Float[ArrayT, "*b ph ad"] | None = None
     action_valid: at.Bool[ArrayT, "*b ah"] | None = None
+    # Per-(timestep, dim) action validity (body+hand SONIC VLA: hand dims of hand-less corpora
+    # carry no loss/gradient). None -> per-dim masking disabled (all legacy paths).
+    action_dim_valid: at.Bool[ArrayT, "*b ah ad"] | None = None
 
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
@@ -134,6 +137,7 @@ class Observation(Generic[ArrayT]):
             token_loss_mask=data.get("token_loss_mask"),
             prev_tokens=data.get("prev_tokens"),
             action_valid=data.get("action_valid"),
+            action_dim_valid=data.get("action_dim_valid"),
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:
@@ -215,6 +219,7 @@ def preprocess_observation(
         token_loss_mask=observation.token_loss_mask,
         prev_tokens=observation.prev_tokens,
         action_valid=observation.action_valid,
+        action_dim_valid=observation.action_dim_valid,
     )
 
 

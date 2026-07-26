@@ -36,15 +36,18 @@ class SonicTokenInputs(transforms.DataTransformFn):
 
     # Model action dimension (= SONIC token dim, 64). Only used to size the dummy state.
     action_dim: int = 64
+    # State width: 32 (q_dev+gravity) or 96 (+ the 1s-lagged hand-state token, bhs configs).
+    # Only sizes the zeros fallback when no state is provided.
+    state_dim: int = 32
 
     def __call__(self, data: dict) -> dict:
         image = _parse_image(data["image"])
         zeros_img = np.zeros_like(image)
         inputs = {
-            # 32-D proprio (q_dev(29) + gravity(3)) when a proprio source is present; used by pi0.5
-            # only if discrete_state_input=True (tokenized into the prompt). Fully-latent configs
-            # (discrete_state_input=False) still receive it but the model ignores it. Fallback = zeros.
-            "state": np.asarray(data.get("state", np.zeros(32, np.float32)), dtype=np.float32),
+            # Proprio state (q_dev(29) + gravity(3) [+ lagged hand token(64)]) when a proprio source
+            # is present; used by pi0.5 only if discrete_state_input=True (tokenized into the
+            # prompt). Fully-latent configs still receive it but the model ignores it. Fallback = zeros.
+            "state": np.asarray(data.get("state", np.zeros(self.state_dim, np.float32)), dtype=np.float32),
             "image": {
                 "base_0_rgb": image,
                 "left_wrist_0_rgb": zeros_img,
@@ -68,6 +71,10 @@ class SonicTokenInputs(transforms.DataTransformFn):
             inputs["actions"] = np.asarray(data["target_tokens"], dtype=np.float32)
         if "target_valid" in data:
             inputs["action_valid"] = np.asarray(data["target_valid"], dtype=bool)
+        # Body+hand mode: per-(timestep, dim) validity (hand dims of hand-less corpora are
+        # loss-masked). Absent for all 64-dim configs -> Observation.action_dim_valid stays None.
+        if "target_dim_valid" in data:
+            inputs["action_dim_valid"] = np.asarray(data["target_dim_valid"], dtype=bool)
         # Language: dataset uses "instruction"; inference uses "prompt".
         instr = data.get("instruction", data.get("prompt"))
         if instr is not None:

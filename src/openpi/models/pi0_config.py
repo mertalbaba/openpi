@@ -38,6 +38,10 @@ class Pi0Config(_model.BaseModelConfig):
     # per-timestep obs.action_valid mask (occluded targets are excluded from the loss).
     prev_token_history: int = 0
 
+    # SONIC body+hand VLA: enable the per-(timestep, dim) loss mask (obs.action_dim_valid).
+    # Needed when some corpora lack part of the action vector (LeVERB has no hand tokens).
+    use_action_dim_valid: bool = False
+
     pytorch_compile_mode: str | None = "max-autotune"
 
     def __post_init__(self):
@@ -92,7 +96,11 @@ class Pi0Config(_model.BaseModelConfig):
                 ),
                 action_valid=(
                     jax.ShapeDtypeStruct([batch_size, self.action_horizon], jnp.bool_)
-                    if self.prev_token_history > 0 else None
+                    if self.prev_token_history > 0 or self.use_action_dim_valid else None
+                ),
+                action_dim_valid=(
+                    jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.bool_)
+                    if self.use_action_dim_valid else None
                 ),
             )
         action_spec = jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.float32)

@@ -63,6 +63,18 @@ def posemb_sincos(
     return jnp.concatenate([jnp.sin(sinusoid_input), jnp.cos(sinusoid_input)], axis=-1)
 
 
+def masked_dim_mean(err: at.Array, dim_valid: at.Array) -> at.Array:
+    """Mean of `err` over the last (action-dim) axis restricted to valid dims.
+
+    err: (*b, ah, ad) squared flow-matching error; dim_valid: (*b, ah, ad) bool.
+    Invalid dims contribute 0 loss and 0 gradient; each timestep normalizes by its OWN
+    valid-dim count (a body-only timestep is a clean mean over 64 dims, not 128).
+    A timestep with zero valid dims yields 0.0 (denominator clamped -> no NaN/inf).
+    """
+    dv = dim_valid.astype(err.dtype)
+    return (err * dv).sum(axis=-1) / jnp.maximum(dv.sum(axis=-1), 1.0)
+
+
 class Pi0(_model.BaseModel):
     def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
@@ -202,8 +214,14 @@ class Pi0(_model.BaseModel):
 
     @override
     def compute_loss(
-        self, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions, *, train: bool = False
-    ) -> at.Float[at.Array, "*b ah"]:
+        self,
+        rng: at.KeyArrayLike,
+        observation: _model.Observation,
+        actions: _model.Actions,
+        *,
+        train: bool = False,
+        return_per_dim: bool = False,
+    ) -> at.Float[at.Array, "*b ah"] | tuple[at.Float[at.Array, "*b ah"], tuple[at.Array, at.Array]]:
         preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
         observation = _model.preprocess_observation(preprocess_rng, observation, train=train)
 
@@ -226,11 +244,26 @@ class Pi0(_model.BaseModel):
         )
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-        loss = jnp.mean(jnp.square(v_t - u_t), axis=-1)  # (*b, ah)
+        err = jnp.square(v_t - u_t)  # (*b, ah, ad)
+        # SONIC body+hand VLA: per-(timestep, dim) mask -- hand dims of hand-less corpora
+        # (LeVERB) contribute 0 loss and 0 gradient; each timestep averages over its VALID
+        # dims only (a body-only timestep is not diluted by zeroed hand dims).
+        if observation.action_dim_valid is not None:
+            loss = masked_dim_mean(err, observation.action_dim_valid)  # (*b, ah)
+        else:
+            loss = jnp.mean(err, axis=-1)  # (*b, ah)
         # SONIC token-VLA: zero the flow-matching loss on occluded target tokens
         # (Xperience). Invalid timesteps get 0 loss + 0 gradient.
         if observation.action_valid is not None:
             loss = loss * observation.action_valid.astype(loss.dtype)
+        if return_per_dim:
+            # masked per-dim squared error + its mask, for aux logging (e.g. body vs hand loss)
+            mask = jnp.ones_like(err)
+            if observation.action_dim_valid is not None:
+                mask = mask * observation.action_dim_valid.astype(err.dtype)
+            if observation.action_valid is not None:
+                mask = mask * observation.action_valid[..., None].astype(err.dtype)
+            return loss, (err * mask, mask)
         return loss
 
     @override
