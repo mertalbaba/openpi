@@ -408,6 +408,14 @@ class SonicTokenDataConfig(DataConfigFactory):
     # (96 digitized state values in the pi0.5 prompt). Own repo_id/stats: state is 96-d.
     use_hand_state: bool = False
     hand_state_dropout: float = 0.5
+    # HE category filter: False (default) = historical Locomanip-only subset (879 eps);
+    # True = ALL 4064 HE episodes incl. tabletop manipulation (own index cache + own stats).
+    he_all_categories: bool = False
+    # Mix annealing: linearly interpolate corpus weights from `weights` to `weights_end` over
+    # `mix_anneal_samples` GLOBAL samples (= anneal_steps x GLOBAL batch size -- defined in
+    # samples so launcher batch overrides can't stretch the schedule). None/0 -> static mix.
+    weights_end: dict[str, float] | None = None
+    mix_anneal_samples: int = 0
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -427,6 +435,8 @@ class SonicTokenDataConfig(DataConfigFactory):
         use_proprio, weights = self.use_proprio, self.weights
         use_hand = self.use_hand
         use_hand_state, hand_state_dropout = self.use_hand_state, self.hand_state_dropout
+        he_all_categories = self.he_all_categories
+        weights_end, mix_anneal_samples = self.weights_end, self.mix_anneal_samples
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
@@ -439,7 +449,8 @@ class SonicTokenDataConfig(DataConfigFactory):
             # v2: 5-corpus mix with proprio sidecars (box-default paths, env-overridable). v1: the
             # original fully-latent 3-corpus setup (cluster-default paths, env-overridable).
             if use_proprio:
-                corpora = default_corpora(weights)
+                corpora = default_corpora(
+                    weights, he_category_filter=None if he_all_categories else "Locomanip")
             else:
                 corpora = [
                     CorpusSpec("leverb", "lerobot",
@@ -467,6 +478,8 @@ class SonicTokenDataConfig(DataConfigFactory):
                 use_hand=use_hand,
                 use_hand_state=use_hand_state,
                 hand_state_dropout=hand_state_dropout,
+                weights_end=weights_end,
+                mix_anneal_samples=mix_anneal_samples,
             )
             index_dir = os.environ.get("SONIC_INDEX_DIR")
             if index_dir:
@@ -1192,6 +1205,45 @@ _CONFIGS = [
         data=SonicTokenDataConfig(
             repo_id="sonic_bhs", history=0, history_stride=20, split="train",
             test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=150_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=150_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # BHS-ANNEAL: bhs + ALL HE categories (4064 eps incl. tabletop manipulation -- the 0727
+    # closed-loop finding: Locomanip-only HE left the model with locomotion-only behavior) +
+    # continuous mix annealing xperience 0.68 -> 0.2 (others 0.08 -> 0.2) over the first 100k
+    # steps (12.8M samples @ global bs 128), then uniform to 150k. Own repo_id/stats
+    # (sonic_bhs_all: HE distribution changed). Eval split now spans ALL HE categories --
+    # NOT metric-comparable to earlier runs.
+    TrainConfig(
+        name="pi05_sonic_bhs_anneal",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=448,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs_all", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            he_all_categories=True,
+            weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
+                     "leverb": 0.08, "xperience": 0.68},
+            weights_end={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                         "leverb": 0.2, "xperience": 0.2},
+            mix_anneal_samples=12_800_000,
         ),
         batch_size=64,
         fsdp_devices=2,
