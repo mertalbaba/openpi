@@ -268,6 +268,7 @@ def main(config: _config.TrainConfig):
     # Held-out token-prediction eval (optional). Builds an "eval"-split loader and a jitted
     # sample_actions that mirrors ptrain_step's shardings; logs eval/* metrics to wandb.
     eval_loader = None
+    scenario_eval_loaders = {}
     run_token_eval = None
     eval_rng = jax.random.key(config.seed + 1)
     if config.eval_interval > 0 and hasattr(config.data, "split"):
@@ -286,6 +287,20 @@ def main(config: _config.TrainConfig):
         eval_loader = _data_loader.create_data_loader(
             eval_config, sharding=data_sharding, shuffle=False, num_batches=config.eval_batches
         )
+        # scenario-split eval (locomotion = HE Locomanip, manipulation = other HE categories):
+        # only meaningful when training sees all HE categories.
+        scenario_eval_loaders = {}
+        if getattr(config.data, "he_all_categories", False) and getattr(config.data, "scenario", None) is None:
+            for scen, tag in (("locomotion", "loco"), ("manipulation", "manip")):
+                scen_config = dataclasses.replace(
+                    config,
+                    data=dataclasses.replace(config.data, split="eval", history_dropout=0.0, scenario=scen),
+                    num_workers=min(config.num_workers, 4),
+                )
+                scenario_eval_loaders[tag] = _data_loader.create_data_loader(
+                    scen_config, sharding=data_sharding, shuffle=False, num_batches=config.eval_batches
+                )
+            logging.info("Scenario-split eval enabled: eval/loco_* + eval/manip_*")
 
         def _eval_sample(rng, state, observation):
             m = nnx.merge(state.model_def, state.ema_params if state.ema_params is not None else state.params)
@@ -321,13 +336,19 @@ def main(config: _config.TrainConfig):
             infos = []
 
         if eval_loader is not None and step % config.eval_interval == 0:
+            log_payload = {}
             with sharding.set_mesh(mesh):
                 eval_metrics = run_token_eval(peval, eval_loader, train_state, eval_rng, config.eval_batches,
                                               dim_groups=config.loss_dim_groups)
+                log_payload.update({f"eval/{k}": v for k, v in eval_metrics.items()})
+                for tag, loader in scenario_eval_loaders.items():
+                    sm = run_token_eval(peval, loader, train_state, eval_rng, config.eval_batches,
+                                        dim_groups=config.loss_dim_groups)
+                    log_payload.update({f"eval/{tag}_{k}": v for k, v in sm.items()})
             if eval_metrics:
                 em = ", ".join(f"{k}={v:.4f}" for k, v in eval_metrics.items() if isinstance(v, float))
                 pbar.write(f"Step {step} [eval]: {em}")
-                wandb.log({f"eval/{k}": v for k, v in eval_metrics.items()}, step=step)
+                wandb.log(log_payload, step=step)
 
         batch = next(data_iter)
 

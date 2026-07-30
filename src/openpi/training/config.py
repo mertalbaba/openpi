@@ -408,6 +408,12 @@ class SonicTokenDataConfig(DataConfigFactory):
     # (96 digitized state values in the pi0.5 prompt). Own repo_id/stats: state is 96-d.
     use_hand_state: bool = False
     hand_state_dropout: float = 0.5
+    # FRESH hand proprio: 14-d dex3-equivalent current joints (dataloader decodes hand_tokens[t],
+    # frame 0; deployment = measured dex3 joints). State grows by 14 (e.g. 96 -> 110).
+    use_hand_proprio: bool = False
+    # Scenario restriction ("locomotion"|"manipulation"|None) -- used by train.py to build
+    # per-scenario EVAL loaders (Locomanip vs other HE categories). Not for training.
+    scenario: str | None = None
     # HE category filter: False (default) = historical Locomanip-only subset (879 eps);
     # True = ALL 4064 HE episodes incl. tabletop manipulation (own index cache + own stats).
     he_all_categories: bool = False
@@ -435,8 +441,10 @@ class SonicTokenDataConfig(DataConfigFactory):
         use_proprio, weights = self.use_proprio, self.weights
         use_hand = self.use_hand
         use_hand_state, hand_state_dropout = self.use_hand_state, self.hand_state_dropout
+        use_hand_proprio = self.use_hand_proprio
         he_all_categories = self.he_all_categories
         weights_end, mix_anneal_samples = self.weights_end, self.mix_anneal_samples
+        scenario = self.scenario
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
@@ -478,8 +486,10 @@ class SonicTokenDataConfig(DataConfigFactory):
                 use_hand=use_hand,
                 use_hand_state=use_hand_state,
                 hand_state_dropout=hand_state_dropout,
+                use_hand_proprio=use_hand_proprio,
                 weights_end=weights_end,
                 mix_anneal_samples=mix_anneal_samples,
+                scenario_filter=scenario,
             )
             index_dir = os.environ.get("SONIC_INDEX_DIR")
             if index_dir:
@@ -489,7 +499,7 @@ class SonicTokenDataConfig(DataConfigFactory):
         data_transforms = _transforms.Group(
             inputs=[sonic_policy.SonicTokenInputs(
                 action_dim=model_config.action_dim,
-                state_dim=32 + (64 if self.use_hand_state else 0),
+                state_dim=32 + (64 if self.use_hand_state else 0) + (14 if self.use_hand_proprio else 0),
             )],
             outputs=[sonic_policy.SonicTokenOutputs()],
         )
@@ -1243,6 +1253,45 @@ _CONFIGS = [
                      "leverb": 0.08, "xperience": 0.68},
             weights_end={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
                          "leverb": 0.2, "xperience": 0.2},
+            mix_anneal_samples=12_800_000,
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=5e-5, decay_steps=150_000, decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=150_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # BHS2: bhs-anneal + FRESH hand proprio (14-d dex3-equivalent current joints; the 0728
+    # finding: without it the model mean-collapses to average manipulation behavior) + a
+    # manipulation-heavier END mix (HE .25 / PSI .25 / UnifoLM .2 / LeVERB .1 / Xperience .2).
+    # State (110,) = q_dev(29)+grav(3)+lagged hand token(64)+dex3_current(14); max_token_len 512.
+    # Scenario-split eval: loco (Locomanip) vs manip (other HE categories) via loss_dim_groups'
+    # sibling knob in train.py (eval/loco_* + eval/manip_* wandb keys).
+    TrainConfig(
+        name="pi05_sonic_bhs2",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
+                     "leverb": 0.08, "xperience": 0.68},
+            weights_end={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
+                         "leverb": 0.1, "xperience": 0.2},
             mix_anneal_samples=12_800_000,
         ),
         batch_size=64,
