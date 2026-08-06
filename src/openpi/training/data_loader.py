@@ -485,6 +485,19 @@ def _worker_init_fn(worker_id: int) -> None:
     # means that this approach will not work for selecting the backend.
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+    # Datasets that sample from an instance-level RNG fork it IDENTICALLY into every worker
+    # (same stream in all workers -> batches duplicated num_workers times). Let them reseed.
+    info = torch.utils.data.get_worker_info()
+    if info is not None:
+        ds = info.dataset
+        # unwrap common wrappers (TransformedDataset etc.) to reach the base dataset
+        for _ in range(4):
+            if hasattr(ds, "_reseed_worker"):
+                ds._reseed_worker(info.id)
+                break
+            ds = getattr(ds, "_dataset", getattr(ds, "dataset", None))
+            if ds is None:
+                break
 
 
 class RLDSDataLoader:

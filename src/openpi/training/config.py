@@ -403,6 +403,9 @@ class SonicTokenDataConfig(DataConfigFactory):
     # (LeVERB has no hand sidecar -> its hand dims are loss-masked). Requires
     # model.action_dim=128 and model.use_action_dim_valid=True.
     use_hand: bool = False
+    # hj mode: hand target = 14 continuous normalized commanded joints instead of 64-d tokens
+    # (action 78 = body 64 ++ hand 14); requires a corpus with hand_targets.npy sidecars.
+    use_hand_joints: bool = False
     # hand-state input (bhs): append the 1s-LAGGED hand token to the state -> (96,). Leak-free
     # (strictly-past window) and sensor-encodable at deploy. Needs model.max_token_len ~300
     # (96 digitized state values in the pi0.5 prompt). Own repo_id/stats: state is 96-d.
@@ -414,6 +417,14 @@ class SonicTokenDataConfig(DataConfigFactory):
     # Scenario restriction ("locomotion"|"manipulation"|None) -- used by train.py to build
     # per-scenario EVAL loaders (Locomanip vs other HE categories). Not for training.
     scenario: str | None = None
+    # SIMPLE-finetune corpus: append the converted SIMPLE teleop demos (weight from
+    # weights["simple"]). Roots env-overridable (SONIC_SIMPLE_{ROOT,PROPRIO,HAND}).
+    include_simple: bool = False
+    # Consistent state joint-order fix: serve ALL corpora's q_dev in SONIC-grouped order
+    # (robot sidecars are stored IsaacLab-ordered but were historically served un-remapped,
+    # while Xperience was remapped and deploy sends SONIC-grouped — verified 2026-07-30).
+    # Scoped opt-in: enabling it globally would corrupt resumes of older runs.
+    fix_state_order: bool = False
     # HE category filter: False (default) = historical Locomanip-only subset (879 eps);
     # True = ALL 4064 HE episodes incl. tabletop manipulation (own index cache + own stats).
     he_all_categories: bool = False
@@ -440,11 +451,13 @@ class SonicTokenDataConfig(DataConfigFactory):
         train_exclude_corpora = self.train_exclude_corpora
         use_proprio, weights = self.use_proprio, self.weights
         use_hand = self.use_hand
+        use_hand_joints = self.use_hand_joints
         use_hand_state, hand_state_dropout = self.use_hand_state, self.hand_state_dropout
         use_hand_proprio = self.use_hand_proprio
         he_all_categories = self.he_all_categories
         weights_end, mix_anneal_samples = self.weights_end, self.mix_anneal_samples
         scenario = self.scenario
+        include_simple, fix_state_order = self.include_simple, self.fix_state_order
 
         def dataset_factory(action_horizon: int, mc: _model.BaseModelConfig):
             import sys
@@ -459,6 +472,24 @@ class SonicTokenDataConfig(DataConfigFactory):
             if use_proprio:
                 corpora = default_corpora(
                     weights, he_category_filter=None if he_all_categories else "Locomanip")
+                if include_simple:
+                    _task = "G1WholebodyLocomotionPickBetweenTablesTeleop-v0"
+                    _d = os.environ.get("SONIC_DATASETS", "/home/mealbaba/datasets")
+                    corpora.append(CorpusSpec(
+                        "simple", "lerobot",
+                        os.environ.get("SONIC_SIMPLE_ROOT", f"{_d}/SIMPLE-VLA/{_task}"),
+                        (weights or {}).get("simple", 0.0),
+                        proprio_root=os.environ.get("SONIC_SIMPLE_PROPRIO", f"{_d}/SIMPLE-Proprio/{_task}"),
+                        hand_root=os.environ.get("SONIC_SIMPLE_HAND", f"{_d}/SIMPLE-Hand/{_task}"),
+                        hand_file=("hand_targets.npy" if use_hand_joints else "hand_tokens.npy"),
+                    ))
+                if fix_state_order:
+                    # all robot sidecars store q_dev in IsaacLab order -> mark them for the
+                    # IL->G1 remap at load so every corpus (and deploy) shares SONIC-grouped order
+                    corpora = [
+                        dataclasses.replace(c, q_order="isaac") if c.name != "xperience" else c
+                        for c in corpora
+                    ]
             else:
                 corpora = [
                     CorpusSpec("leverb", "lerobot",
@@ -484,6 +515,7 @@ class SonicTokenDataConfig(DataConfigFactory):
                 test_category=test_category,
                 train_exclude_corpora=train_exclude_corpora,
                 use_hand=use_hand,
+                use_hand_joints=use_hand_joints,
                 use_hand_state=use_hand_state,
                 hand_state_dropout=hand_state_dropout,
                 use_hand_proprio=use_hand_proprio,
@@ -1309,6 +1341,117 @@ _CONFIGS = [
         eval_interval=500,
         eval_batches=8,
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # SIMPLE-FT: finetune bhs2 on SIMPLE's own teleop demos (the psi0 protocol: they train
+    # 40k steps @ global batch 64 on 99 eps / 62.7k frames of this exact task). Purpose is
+    # double: matched-protocol baseline comparison AND closing the Isaac render gap (training
+    # frames ARE Isaac-rendered). Mix: 0.8 SIMPLE + original corpora against forgetting
+    # (leverb 0 — no hands, locomotion-only). fix_state_order=True: first config with
+    # CONSISTENT SONIC-grouped state across all corpora (matches the deploy agent).
+    # Set SONIC_FT_INIT=.../pi05_sonic_bhs2/<exp>/130000/params. Own stats: sonic_bhs2_sft.
+    TrainConfig(
+        name="pi05_sonic_bhs2_simple_ft",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs2_sft", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            include_simple=True, fix_state_order=True,
+            weights={"simple": 0.8, "humanoid_everyday": 0.06, "psi": 0.05,
+                     "unifolm_wbt": 0.05, "leverb": 0.0, "xperience": 0.04},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        # finetune schedule (he_ft idiom): short warmup, halved peak, constant after
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=40_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=40_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # STELEOP-HT: finetune on the TELEOP-CAPTURE corpus (the correct whole-body source; see
+    # memory #11-13), hands as TOKENS. Identical machinery to bhs2_simple_ft; point the corpus
+    # at conversion outputs via env at norm-stats AND launch time:
+    #   SONIC_SIMPLE_ROOT=.../SIMPLE-Teleop-VLA/<task>
+    #   SONIC_SIMPLE_PROPRIO=.../SIMPLE-Teleop-Proprio/<task>
+    #   SONIC_SIMPLE_HAND=.../SIMPLE-Teleop-Hand/<task>
+    TrainConfig(
+        name="pi05_sonic_steleop_ht",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_steleop_ht", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            include_simple=True, fix_state_order=True,
+            weights={"simple": 0.8, "humanoid_everyday": 0.06, "psi": 0.05,
+                     "unifolm_wbt": 0.05, "leverb": 0.0, "xperience": 0.04},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=40_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=40_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # STELEOP-HJ: same corpus, hands as CONTINUOUS 14-d commanded joints (action 78 = 64++14,
+    # fixed dex3 affine to [-1,1] baked into data+deploy; hand head fresh-init from the 128-d
+    # ckpt). use_hand_state=False (state 46 = 32 ++ dex3 proprio) -- the lagged-token block was
+    # zeros at deploy anyway. SONIC_SIMPLE_HAND -> .../SIMPLE-Teleop-HandJ/<task>.
+    TrainConfig(
+        name="pi05_sonic_steleop_hj",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=78, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_steleop_hj", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_joints=True,
+            use_hand_state=False, use_hand_proprio=True, he_all_categories=True,
+            include_simple=True, fix_state_order=True,
+            weights={"simple": 0.8, "humanoid_everyday": 0.06, "psi": 0.05,
+                     "unifolm_wbt": 0.05, "leverb": 0.0, "xperience": 0.04},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=40_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=40_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 78)},
     ),
     # Ablation of the above: identical, but HE is DROPPED from training (LeVERB + Xperience only).
     # The HE eval (~5%) + test_locomotion (15% Locomanip) holdouts are unchanged, so the two runs
