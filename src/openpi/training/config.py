@@ -1381,6 +1381,39 @@ _CONFIGS = [
         eval_batches=8,
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
     ),
+    # BHS2-HEFT: HE-only post-train stage matching psi0's protocol (their SIMPLE ft inits from
+    # an ego200k+he30k checkpoint). bhs2 architecture unchanged; 30k steps on pure HE (all
+    # categories). The SIMPLE fts then init from THIS checkpoint via SONIC_FT_INIT.
+    TrainConfig(
+        name="pi05_sonic_bhs2_heft",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs2_heft", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True, fix_state_order=True,
+            weights={"humanoid_everyday": 1.0, "psi": 0.0, "unifolm_wbt": 0.0,
+                     "leverb": 0.0, "xperience": 0.0},
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=30_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=30_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
     # STELEOP-HT: finetune on the TELEOP-CAPTURE corpus (the correct whole-body source; see
     # memory #11-13), hands as TOKENS. Identical machinery to bhs2_simple_ft; point the corpus
     # at conversion outputs via env at norm-stats AND launch time:
@@ -1399,8 +1432,9 @@ _CONFIGS = [
             test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
             use_hand_proprio=True, he_all_categories=True,
             include_simple=True, fix_state_order=True,
-            weights={"simple": 0.8, "humanoid_everyday": 0.06, "psi": 0.05,
-                     "unifolm_wbt": 0.05, "leverb": 0.0, "xperience": 0.04},
+            # pure-SIMPLE ft (0807): no replay mixing -- the goal is the benchmark, not retention
+            weights={"simple": 1.0, "humanoid_everyday": 0.0, "psi": 0.0,
+                     "unifolm_wbt": 0.0, "leverb": 0.0, "xperience": 0.0},
         ),
         batch_size=64,
         fsdp_devices=2,
@@ -1434,8 +1468,9 @@ _CONFIGS = [
             test_frac=0.15, use_proprio=True, use_hand=True, use_hand_joints=True,
             use_hand_state=False, use_hand_proprio=True, he_all_categories=True,
             include_simple=True, fix_state_order=True,
-            weights={"simple": 0.8, "humanoid_everyday": 0.06, "psi": 0.05,
-                     "unifolm_wbt": 0.05, "leverb": 0.0, "xperience": 0.04},
+            # pure-SIMPLE ft (0807): no replay mixing -- the goal is the benchmark, not retention
+            weights={"simple": 1.0, "humanoid_everyday": 0.0, "psi": 0.0,
+                     "unifolm_wbt": 0.0, "leverb": 0.0, "xperience": 0.0},
         ),
         batch_size=64,
         fsdp_devices=2,
