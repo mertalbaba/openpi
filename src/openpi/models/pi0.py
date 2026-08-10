@@ -113,8 +113,11 @@ class Pi0(_model.BaseModel):
 
         # Training-time RTC (see Pi0Config.rtc_max_delay). Per-row time needs adaRMS (pi05).
         self.rtc_max_delay = config.rtc_max_delay
+        self.rtc_delay_weighting = config.rtc_delay_weighting
         if config.rtc_max_delay > 0 and not config.pi05:
             raise ValueError("rtc_max_delay requires pi05 (per-row adaRMS time conditioning)")
+        if config.rtc_delay_weighting not in ("uniform", "exp"):
+            raise ValueError(f"unknown rtc_delay_weighting: {config.rtc_delay_weighting!r}")
 
         # SONIC token-VLA: project the previous-token history into prefix tokens
         # (paligemma width, attended alongside image + language).
@@ -250,8 +253,11 @@ class Pi0(_model.BaseModel):
         # conditioned on that committed prefix; the prefix rows carry no loss.
         rtc_keep = None
         if self.rtc_max_delay > 0:
-            w = jnp.exp(jnp.arange(self.rtc_max_delay, dtype=jnp.float32)[::-1])
-            delay = jax.random.choice(delay_rng, self.rtc_max_delay, shape=batch_shape, p=w / jnp.sum(w))
+            if self.rtc_delay_weighting == "exp":
+                w = jnp.exp(jnp.arange(self.rtc_max_delay, dtype=jnp.float32)[::-1])
+                delay = jax.random.choice(delay_rng, self.rtc_max_delay, shape=batch_shape, p=w / jnp.sum(w))
+            else:  # uniform: equal coverage of every delay deployment might use
+                delay = jax.random.randint(delay_rng, batch_shape, 0, self.rtc_max_delay)
             prefix_rows = jnp.arange(self.action_horizon) < delay[..., None]  # (*b, ah)
             x_t = jnp.where(prefix_rows[..., None], actions, x_t)
             time = jnp.where(prefix_rows, 0.0, time[..., None])  # (*b, ah) per-row time

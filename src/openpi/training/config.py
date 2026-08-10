@@ -1343,19 +1343,21 @@ _CONFIGS = [
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
     ),
     # BHS3-RTC: training-time real-time chunking (PI's kinetix recipe) as a SHORT fine-tune of
-    # the finished bhs3 checkpoint. Per sample a delay d < 6 rows (~120 ms at 50 Hz, exp-weighted
-    # toward 0) is drawn; the first d action rows are clamped to clean GT at flow time 0 and
-    # loss-masked, teaching the model to continue a committed chunk prefix -- the boundary-jump
-    # fix inference-time RTC alone couldn't deliver. Data = bhs3's END mix (no anneal), stats
-    # reused from the bhs2 asset dir (recomputed 0809 with the *-Hand-CMD roots -- launch with
-    # the same SONIC_*_HAND env vars as launch_bhs3.sh). Set SONIC_FT_INIT=<bhs3 final>/params.
+    # the finished bhs3 checkpoint. Per sample a delay d ~ uniform{0..9} (up to 200 ms at 50 Hz;
+    # uniform, not kinetix's exp-toward-0, so ANY deploy latency in range is equally trained and
+    # SONIC_RTC can be swept without retraining) is drawn; the first d action rows are clamped to
+    # clean GT at flow time 0 and loss-masked, teaching the model to continue a committed chunk
+    # prefix -- the boundary-jump fix inference-time RTC alone couldn't deliver. Costs ~9% of the
+    # row-loss signal (E[d]=4.5 of 50 rows). Data = bhs3's END mix (no anneal), stats reused from
+    # the bhs2 asset dir (recomputed 0809 with the *-Hand-CMD roots -- launch with the same
+    # SONIC_*_HAND env vars as launch_bhs3.sh). Set SONIC_FT_INIT=<bhs3 final>/params.
     TrainConfig(
         name="pi05_sonic_bhs3_rtc",
         project_name="humanoid-vla",
         model=pi0_config.Pi0Config(
             pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
             prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
-            rtc_max_delay=6,
+            rtc_max_delay=10, rtc_delay_weighting="uniform",
         ),
         data=SonicTokenDataConfig(
             repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
