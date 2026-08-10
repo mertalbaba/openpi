@@ -42,6 +42,13 @@ class Pi0Config(_model.BaseModelConfig):
     # Needed when some corpora lack part of the action vector (LeVERB has no hand tokens).
     use_action_dim_valid: bool = False
 
+    # Training-time real-time chunking (PI's kinetix recipe): if > 0, each training sample gets a
+    # random delay d < rtc_max_delay (exponentially weighted toward small d); the first d action
+    # rows are clamped to the clean ground-truth actions at flow time 0 and excluded from the
+    # loss, so the model learns to continue a committed prefix. Requires pi05 (per-row adaRMS
+    # time). Intended for a short fine-tune of an already-trained policy, not from-scratch runs.
+    rtc_max_delay: int = 0
+
     pytorch_compile_mode: str | None = "max-autotune"
 
     def __post_init__(self):

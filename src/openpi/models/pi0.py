@@ -111,6 +111,11 @@ class Pi0(_model.BaseModel):
             self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
+        # Training-time RTC (see Pi0Config.rtc_max_delay). Per-row time needs adaRMS (pi05).
+        self.rtc_max_delay = config.rtc_max_delay
+        if config.rtc_max_delay > 0 and not config.pi05:
+            raise ValueError("rtc_max_delay requires pi05 (per-row adaRMS time conditioning)")
+
         # SONIC token-VLA: project the previous-token history into prefix tokens
         # (paligemma width, attended alongside image + language).
         self.prev_token_history = config.prev_token_history
@@ -165,12 +170,12 @@ class Pi0(_model.BaseModel):
 
     @at.typecheck
     def embed_suffix(
-        self, obs: _model.Observation, noisy_actions: _model.Actions, timestep: at.Float[at.Array, " b"]
+        self, obs: _model.Observation, noisy_actions: _model.Actions, timestep: at.Float[at.Array, "b *_ah"]
     ) -> tuple[
         at.Float[at.Array, "b s emb"],
         at.Bool[at.Array, "b s"],
         at.Bool[at.Array, " s"],
-        at.Float[at.Array, "b emb"] | None,
+        at.Float[at.Array, "b *_ah emb"] | None,
     ]:
         input_mask = []
         ar_mask = []
@@ -184,8 +189,14 @@ class Pi0(_model.BaseModel):
             ar_mask += [True]
 
         action_tokens = self.action_in_proj(noisy_actions)
-        # embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
-        time_emb = posemb_sincos(timestep, self.action_in_proj.out_features, min_period=4e-3, max_period=4.0)
+        # embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1].
+        # timestep may be [b] (one flow time per sample) or [b, ah] (PER-ROW flow time -- RTC
+        # delay conditioning: committed prefix rows are clean at time 0 while the rest denoise).
+        per_row_time = timestep.ndim == 2
+        time_flat = timestep.reshape(-1) if per_row_time else timestep
+        time_emb = posemb_sincos(time_flat, self.action_in_proj.out_features, min_period=4e-3, max_period=4.0)
+        if per_row_time:
+            time_emb = time_emb.reshape(timestep.shape[0], timestep.shape[1], -1)
         if self.pi05:
             # time MLP (for adaRMS)
             time_emb = self.time_mlp_in(time_emb)
@@ -193,10 +204,11 @@ class Pi0(_model.BaseModel):
             time_emb = self.time_mlp_out(time_emb)
             time_emb = nnx.swish(time_emb)
             action_expert_tokens = action_tokens
-            adarms_cond = time_emb
+            adarms_cond = time_emb  # [b, emb] or [b, ah, emb]; RMSNorm broadcasts either
         else:
             # mix timestep + action information using an MLP (no adaRMS)
-            time_tokens = einops.repeat(time_emb, "b emb -> b s emb", s=self.action_horizon)
+            time_tokens = (time_emb if per_row_time
+                           else einops.repeat(time_emb, "b emb -> b s emb", s=self.action_horizon))
             action_time_tokens = jnp.concatenate([action_tokens, time_tokens], axis=-1)
             action_time_tokens = self.action_time_mlp_in(action_time_tokens)
             action_time_tokens = nnx.swish(action_time_tokens)
@@ -222,7 +234,7 @@ class Pi0(_model.BaseModel):
         train: bool = False,
         return_per_dim: bool = False,
     ) -> at.Float[at.Array, "*b ah"] | tuple[at.Float[at.Array, "*b ah"], tuple[at.Array, at.Array]]:
-        preprocess_rng, noise_rng, time_rng = jax.random.split(rng, 3)
+        preprocess_rng, noise_rng, time_rng, delay_rng = jax.random.split(rng, 4)
         observation = _model.preprocess_observation(preprocess_rng, observation, train=train)
 
         batch_shape = actions.shape[:-2]
@@ -231,6 +243,19 @@ class Pi0(_model.BaseModel):
         time_expanded = time[..., None, None]
         x_t = time_expanded * noise + (1 - time_expanded) * actions
         u_t = noise - actions
+
+        # Training-time RTC (PI kinetix recipe): per sample, draw a delay d and freeze the first
+        # d action rows to the clean ground truth at flow time 0 (openpi convention: t=0 = clean,
+        # t=1 = noise -- kinetix uses the opposite). The model denoises the remaining rows
+        # conditioned on that committed prefix; the prefix rows carry no loss.
+        rtc_keep = None
+        if self.rtc_max_delay > 0:
+            w = jnp.exp(jnp.arange(self.rtc_max_delay, dtype=jnp.float32)[::-1])
+            delay = jax.random.choice(delay_rng, self.rtc_max_delay, shape=batch_shape, p=w / jnp.sum(w))
+            prefix_rows = jnp.arange(self.action_horizon) < delay[..., None]  # (*b, ah)
+            x_t = jnp.where(prefix_rows[..., None], actions, x_t)
+            time = jnp.where(prefix_rows, 0.0, time[..., None])  # (*b, ah) per-row time
+            rtc_keep = 1.0 - prefix_rows.astype(jnp.float32)
 
         # one big forward pass of prefix + suffix at once
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
@@ -256,6 +281,9 @@ class Pi0(_model.BaseModel):
         # (Xperience). Invalid timesteps get 0 loss + 0 gradient.
         if observation.action_valid is not None:
             loss = loss * observation.action_valid.astype(loss.dtype)
+        # RTC: no loss on the committed prefix rows (they were given as clean inputs).
+        if rtc_keep is not None:
+            loss = loss * rtc_keep.astype(loss.dtype)
         if return_per_dim:
             # masked per-dim squared error + its mask, for aux logging (e.g. body vs hand loss)
             mask = jnp.ones_like(err)
@@ -263,6 +291,8 @@ class Pi0(_model.BaseModel):
                 mask = mask * observation.action_dim_valid.astype(err.dtype)
             if observation.action_valid is not None:
                 mask = mask * observation.action_valid[..., None].astype(err.dtype)
+            if rtc_keep is not None:
+                mask = mask * rtc_keep[..., None].astype(err.dtype)
             return loss, (err * mask, mask)
         return loss
 
@@ -274,6 +304,8 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
+        prev_actions: at.Float[at.Array, "b ah ad"] | None = None,
+        inference_delay: int = 0,
     ) -> _model.Actions:
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
@@ -283,6 +315,16 @@ class Pi0(_model.BaseModel):
         if noise is None:
             noise = jax.random.normal(rng, (batch_size, self.action_horizon, self.action_dim))
 
+        # RTC inference: the first `inference_delay` rows are already being executed (tail of the
+        # previous chunk, aligned to this chunk's start). Hold them fixed at flow time 0 and let
+        # the model denoise the rest to smoothly continue them. Requires an RTC-trained model.
+        # NOTE: the branch is structural (prev_actions present or not) so `inference_delay` may
+        # be a traced value under jit; delay 0 with prev_actions passed degrades to no clamping.
+        rtc = prev_actions is not None
+        if rtc:
+            prefix_rows = (jnp.arange(self.action_horizon) < inference_delay)[None, :]  # (1, ah)
+            noise = jnp.where(prefix_rows[..., None], prev_actions, noise)
+
         # first fill KV cache with a forward pass of the prefix
         prefix_tokens, prefix_mask, prefix_ar_mask = self.embed_prefix(observation)
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
@@ -291,9 +333,13 @@ class Pi0(_model.BaseModel):
 
         def step(carry):
             x_t, time = carry
-            suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                observation, x_t, jnp.broadcast_to(time, batch_size)
-            )
+            if rtc:
+                # prefix rows stay clamped to the committed actions at flow time 0
+                x_t = jnp.where(prefix_rows[..., None], prev_actions, x_t)
+                time_arg = jnp.where(prefix_rows, 0.0, jnp.broadcast_to(time, (batch_size, self.action_horizon)))
+            else:
+                time_arg = jnp.broadcast_to(time, batch_size)
+            suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(observation, x_t, time_arg)
             # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
             # other
             suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
@@ -329,4 +375,6 @@ class Pi0(_model.BaseModel):
             return time >= -dt / 2
 
         x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
+        if rtc:
+            x_0 = jnp.where(prefix_rows[..., None], prev_actions, x_0)
         return x_0

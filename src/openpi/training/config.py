@@ -1342,6 +1342,46 @@ _CONFIGS = [
         eval_batches=8,
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
     ),
+    # BHS3-RTC: training-time real-time chunking (PI's kinetix recipe) as a SHORT fine-tune of
+    # the finished bhs3 checkpoint. Per sample a delay d < 6 rows (~120 ms at 50 Hz, exp-weighted
+    # toward 0) is drawn; the first d action rows are clamped to clean GT at flow time 0 and
+    # loss-masked, teaching the model to continue a committed chunk prefix -- the boundary-jump
+    # fix inference-time RTC alone couldn't deliver. Data = bhs3's END mix (no anneal), stats
+    # reused from the bhs2 asset dir (recomputed 0809 with the *-Hand-CMD roots -- launch with
+    # the same SONIC_*_HAND env vars as launch_bhs3.sh). Set SONIC_FT_INIT=<bhs3 final>/params.
+    TrainConfig(
+        name="pi05_sonic_bhs3_rtc",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+            rtc_max_delay=6,
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            weights={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
+                     "leverb": 0.1, "xperience": 0.2},
+            assets=AssetsConfig(assets_dir="./assets/pi05_sonic_bhs2"),
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        # finetune schedule: short warmup, halved peak, constant after
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=10_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=10_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
     # SIMPLE-FT: finetune bhs2 on SIMPLE's own teleop demos (the psi0 protocol: they train
     # 40k steps @ global batch 64 on 99 eps / 62.7k frames of this exact task). Purpose is
     # double: matched-protocol baseline comparison AND closing the Isaac render gap (training

@@ -68,6 +68,12 @@ class Policy(BasePolicy):
     def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
+        # RTC (real-time chunking): the client may attach the still-executing tail of its
+        # previous action chunk, aligned to this chunk's first row. These are MODEL-space
+        # actions exactly as previously returned (SONIC tokens are identity-normalized),
+        # so they bypass the input transforms. Only meaningful for RTC-trained models.
+        rtc_prev = inputs.pop("rtc_prev_actions", None)
+        rtc_delay = int(inputs.pop("rtc_inference_delay", 0) or 0)
         inputs = self._input_transform(inputs)
         if not self._is_pytorch_model:
             # Make a batch and convert to jax.Array.
@@ -86,6 +92,15 @@ class Policy(BasePolicy):
             if noise.ndim == 2:  # If noise is (action_horizon, action_dim), add batch dimension
                 noise = noise[None, ...]  # Make it (1, action_horizon, action_dim)
             sample_kwargs["noise"] = noise
+
+        if rtc_prev is not None and rtc_delay > 0:
+            if self._is_pytorch_model:
+                raise ValueError("RTC prefix clamping is only implemented for the JAX model path")
+            prev = jnp.asarray(rtc_prev, dtype=jnp.float32)
+            if prev.ndim == 2:
+                prev = prev[None, ...]
+            sample_kwargs["prev_actions"] = prev
+            sample_kwargs["inference_delay"] = rtc_delay
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()

@@ -124,9 +124,13 @@ class RMSNorm(nn.Module):
             )  # scale by learned parameter in float32 (matches Flax implementation)
             return normed_inputs.astype(dtype), None  # return in original dtype
 
-        # adaptive RMSNorm
+        # adaptive RMSNorm. cond may be [b, d] (one conditioning vector per sample, broadcast
+        # over the sequence) or [b, s, d] (PER-ROW conditioning -- used by RTC delay training,
+        # where committed prefix rows carry a different flow time than the rows being denoised).
         modulation = nn.Dense(x.shape[-1] * 3, kernel_init=nn.initializers.zeros, dtype=dtype)(cond)
-        scale, shift, gate = jnp.split(modulation[:, None, :], 3, axis=-1)
+        if modulation.ndim == 2:
+            modulation = modulation[:, None, :]
+        scale, shift, gate = jnp.split(modulation, 3, axis=-1)
         normed_inputs = normed_inputs * (1 + scale) + shift  # scale and shift in float32
         return normed_inputs.astype(dtype), gate
 
@@ -392,7 +396,7 @@ class Module(nn.Module):
         embedded: Sequence[at.Float[at.Array, "b _t _d"] | None],
         positions: at.Int[at.Array, "b t"],
         mask: at.Bool[at.Array, "b t s"],
-        adarms_cond: Sequence[at.Float[at.Array, "b _d"] | None] | None = None,
+        adarms_cond: Sequence[at.Float[at.Array, "b *_s _d"] | None] | None = None,
         *,
         kv_cache: KVCache | None = None,
         deterministic: bool = True,
