@@ -1,0 +1,132 @@
+SHELL=/bin/bash
+MODULES_SET_SHELL_STARTUP=0
+no_proxy=localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+_LMFILES__modshare=/cm/local/modulefiles/gmp/6.3.0:1:/cm/local/modulefiles/mpc/1.3.1:1:/cm/local/modulefiles/docker/29.1.3:1:/cm/local/modulefiles/gcc/14.2.0:1:/cm/local/modulefiles/mpfr/4.2.1:1
+MANPATH_modshare=/cm/local/apps/docker/current/man:1:/usr/local/share/man:1:/cm/local/apps/environment-modules/current/share/man:1:/cm/local/apps/environment-modules/4.5.3/share/man:1:/usr/local/man:1:/usr/share/man:1
+MODULES_LMPREREQ=gcc/14.2.0&gmp&mpfr&mpc
+PWD=/home/mealbaba/humanoid-vla/openpi
+MODULESHOME=/cm/local/apps/environment-modules/4.5.3
+MANPATH=/cm/local/apps/docker/current/man:/cm/local/apps/environment-modules/4.5.3/share/man:/usr/local/man:/usr/local/share/man:/usr/share/man:/cm/local/apps/environment-modules/current/share/man
+HOME=/home/mealbaba
+LANG=C.UTF-8
+MODULES_LMNOTUASKED_modshare=mpc/1.3.1:1:gmp/6.3.0:1:mpfr/4.2.1:1
+LD_LIBRARY_PATH_modshare=/cm/local/apps/gmp/6.3.0/lib:1:/cm/local/apps/mpc/1.3.1/lib:1:/cm/local/apps/gcc/14.2.0/lib64:1:/cm/local/apps/mpfr/4.2.1/lib64:1:/cm/local/apps/gcc/14.2.0/lib32:1:/cm/local/apps/mpfr/4.2.1/lib32:1:/cm/local/apps/gcc/14.2.0/lib:1:/cm/local/apps/mpfr/4.2.1/lib:1:/cm/local/apps/gmp/6.3.0/lib64:1:/cm/local/apps/mpc/1.3.1/lib64:1:/cm/local/apps/gmp/6.3.0/lib32:1:/cm/local/apps/mpc/1.3.1/lib32:1
+LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:
+https_proxy=http://10.130.80.8:3128
+MIG_PARTED_CONFIG_FILE=/etc/nvidia-mig-manager/config.yaml
+SSH_CONNECTION=100.79.209.92 54253 100.108.225.50 22
+MIG_PARTED_CHECKPOINT_FILE=/var/lib/nvidia-mig-manager/checkpoint.json
+MODULES_LMNOTUASKED=gmp/6.3.0:mpfr/4.2.1:mpc/1.3.1
+PATH_modshare=/cm/local/apps/docker/current/libexec:1:/opt/bin/:1:/usr/bin:1:/usr/local/bin:1:/bin:1:/snap/bin:1:/cm/local/apps/gcc/14.2.0/bin:1:/sbin:1:/usr/sbin:1:/cm/local/apps/environment-modules/4.5.3/bin:1:/cm/local/apps/docker/current/bin:1:/usr/games:1:/usr/local/sbin:1:/usr/local/games:1:/usr/local/cuda/bin:1
+HF_HOME=/local/mealbaba/tomwm/hf
+LESSCLOSE=/usr/bin/lesspipe %s %s
+LOADEDMODULES_modshare=gmp/6.3.0:1:mpc/1.3.1:1:docker/29.1.3:1:gcc/14.2.0:1:mpfr/4.2.1:1
+TERM=xterm-256color
+MIG_PARTED_HOOKS_FILE=/etc/nvidia-mig-manager/hooks.yaml
+LESSOPEN=| /usr/bin/lesspipe %s
+USER=mealbaba
+NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+LOADEDMODULES=docker/29.1.3:gmp/6.3.0:mpfr/4.2.1:mpc/1.3.1:gcc/14.2.0
+MODULES_LMPREREQ_modshare=gcc/14.2.0&gmp&mpfr&mpc:1
+SHLVL=1
+HTTPS_PROXY=http://10.130.80.8:3128
+HTTP_PROXY=http://10.130.80.8:3128
+http_proxy=http://10.130.80.8:3128
+LD_LIBRARY_PATH=/cm/local/apps/mpc/1.3.1/lib:/cm/local/apps/mpc/1.3.1/lib64:/cm/local/apps/mpc/1.3.1/lib32:/cm/local/apps/mpfr/4.2.1/lib:/cm/local/apps/mpfr/4.2.1/lib64:/cm/local/apps/mpfr/4.2.1/lib32:/cm/local/apps/gmp/6.3.0/lib:/cm/local/apps/gmp/6.3.0/lib64:/cm/local/apps/gmp/6.3.0/lib32:/cm/local/apps/gcc/14.2.0/lib:/cm/local/apps/gcc/14.2.0/lib64:/cm/local/apps/gcc/14.2.0/lib32
+LC_CTYPE=C.UTF-8
+SSH_CLIENT=100.79.209.92 54253 22
+TOM_WM_DATA=/local/mealbaba/tomwm
+DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
+ENABLE_LMOD=0
+LC_ALL=C.UTF-8
+XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
+PATH=/home/mealbaba/.local/bin:/home/mealbaba/bin:/home/mealbaba/.local/bin:/home/mealbaba/.local/bin:/cm/local/apps/gcc/14.2.0/bin:/cm/local/apps/docker/current/libexec:/cm/local/apps/docker/current/bin:/usr/local/cuda/bin:/opt/bin/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/sbin:/usr/sbin:/cm/local/apps/environment-modules/4.5.3/bin
+MODULEPATH=/cm/local/modulefiles:/cm/shared/modulefiles
+_LMFILES_=/cm/local/modulefiles/docker/29.1.3:/cm/local/modulefiles/gmp/6.3.0:/cm/local/modulefiles/mpfr/4.2.1:/cm/local/modulefiles/mpc/1.3.1:/cm/local/modulefiles/gcc/14.2.0
+SSH_TTY=/dev/pts/20
+MODULES_CMD=/cm/local/apps/environment-modules/4.5.3/libexec/modulecmd.tcl
+BASH_FUNC_ml%%=() {  module ml "$@"
+}
+BASH_FUNC_switchml%%=() {  typeset swfound=1;
+ if [ "${MODULES_USE_COMPAT_VERSION:-0}" = '1' ]; then
+ typeset swname='main';
+ if [ -e /cm/local/apps/environment-modules/4.5.3/libexec/modulecmd.tcl ]; then
+ typeset swfound=0;
+ unset MODULES_USE_COMPAT_VERSION;
+ fi;
+ else
+ typeset swname='compatibility';
+ if [ -e /cm/local/apps/environment-modules/4.5.3/libexec/modulecmd-compat ]; then
+ typeset swfound=0;
+ MODULES_USE_COMPAT_VERSION=1;
+ export MODULES_USE_COMPAT_VERSION;
+ fi;
+ fi;
+ if [ $swfound -eq 0 ]; then
+ echo "Switching to Modules $swname version";
+ source /cm/local/apps/environment-modules/4.5.3/init/bash;
+ else
+ echo "Cannot switch to Modules $swname version, command not found";
+ return 1;
+ fi
+}
+BASH_FUNC_module%%=() {  _module_raw "$@" 2>&1
+}
+BASH_FUNC__module_raw%%=() {  unset _mlshdbg;
+ if [ "${MODULES_SILENT_SHELL_DEBUG:-0}" = '1' ]; then
+ case "$-" in 
+ *v*x*)
+ set +vx;
+ _mlshdbg='vx'
+ ;;
+ *v*)
+ set +v;
+ _mlshdbg='v'
+ ;;
+ *x*)
+ set +x;
+ _mlshdbg='x'
+ ;;
+ *)
+ _mlshdbg=''
+ ;;
+ esac;
+ fi;
+ unset _mlre _mlIFS;
+ if [ -n "${IFS+x}" ]; then
+ _mlIFS=$IFS;
+ fi;
+ IFS=' ';
+ for _mlv in ${MODULES_RUN_QUARANTINE:-};
+ do
+ if [ "${_mlv}" = "${_mlv##*[!A-Za-z0-9_]}" -a "${_mlv}" = "${_mlv#[0-9]}" ]; then
+ if [ -n "`eval 'echo ${'$_mlv'+x}'`" ]; then
+ _mlre="${_mlre:-}${_mlv}_modquar='`eval 'echo ${'$_mlv'}'`' ";
+ fi;
+ _mlrv="MODULES_RUNENV_${_mlv}";
+ _mlre="${_mlre:-}${_mlv}='`eval 'echo ${'$_mlrv':-}'`' ";
+ fi;
+ done;
+ if [ -n "${_mlre:-}" ]; then
+ eval `eval ${_mlre} /usr/bin/tclsh /cm/local/apps/environment-modules/4.5.3/libexec/modulecmd.tcl bash '"$@"'`;
+ else
+ eval `/usr/bin/tclsh /cm/local/apps/environment-modules/4.5.3/libexec/modulecmd.tcl bash "$@"`;
+ fi;
+ _mlstatus=$?;
+ if [ -n "${_mlIFS+x}" ]; then
+ IFS=$_mlIFS;
+ else
+ unset IFS;
+ fi;
+ unset _mlre _mlv _mlrv _mlIFS;
+ if [ -n "${_mlshdbg:-}" ]; then
+ set -$_mlshdbg;
+ fi;
+ unset _mlshdbg;
+ return $_mlstatus
+}
+_=/usr/bin/nohup
+OLDPWD=/home/mealbaba/humanoid-vla
+OPENPI_DATA_HOME=/home/mealbaba/openpi
+CUDA_VISIBLE_DEVICES=
+JAX_PLATFORMS=cpu
