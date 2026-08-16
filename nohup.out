@@ -130,3 +130,209 @@ OLDPWD=/home/mealbaba/humanoid-vla
 OPENPI_DATA_HOME=/home/mealbaba/openpi
 CUDA_VISIBLE_DEVICES=
 JAX_PLATFORMS=cpu
+usage: huggingface-cli <command> [<args>] download [-h]
+                                                   [--repo-type {model,dataset,space}]
+                                                   [--revision REVISION]
+                                                   [--include [INCLUDE ...]]
+                                                   [--exclude [EXCLUDE ...]]
+                                                   [--cache-dir CACHE_DIR]
+                                                   [--local-dir LOCAL_DIR]
+                                                   [--local-dir-use-symlinks {auto,True,False}]
+                                                   [--force-download]
+                                                   [--resume-download]
+                                                   [--token TOKEN] [--quiet]
+                                                   [--max-workers MAX_WORKERS]
+                                                   repo_id [filenames ...]
+huggingface-cli <command> [<args>] download: error: argument --local-dir: expected one argument
+Fetching 5713 files:   0%|          | 0/5713 [00:00<?, ?it/s]Fetching 5713 files:   0%|          | 1/5713 [00:00<16:10,  5.89it/s]Fetching 5713 files:   0%|          | 9/5713 [00:00<03:08, 30.29it/s]Fetching 5713 files:   0%|          | 13/5713 [00:00<03:49, 24.83it/s]Fetching 5713 files:   0%|          | 22/5713 [00:00<02:24, 39.40it/s]Fetching 5713 files:   1%|          | 29/5713 [00:00<02:00, 47.18it/s]Fetching 5713 files:   1%|          | 36/5713 [00:00<01:57, 48.16it/s]Fetching 5713 files:   1%|          | 42/5713 [00:01<02:00, 47.25it/s]Fetching 5713 files:   1%|          | 47/5713 [00:01<02:07, 44.51it/s]Fetching 5713 files:   1%|          | 54/5713 [00:01<02:15, 41.89it/s]Fetching 5713 files:   1%|          | 62/5713 [00:01<02:09, 43.81it/s]Fetching 5713 files:   1%|          | 70/5713 [00:01<02:01, 46.28it/s]Fetching 5713 files:   1%|▏         | 75/5713 [00:01<02:03, 45.58it/s]Fetching 5713 files:   1%|▏         | 84/5713 [00:01<01:41, 55.30it/s]Fetching 5713 files:   2%|▏         | 90/5713 [00:02<02:04, 45.12it/s]Fetching 5713 files:   2%|▏         | 95/5713 [00:02<02:17, 40.87it/s]Fetching 5713 files:   2%|▏         | 102/5713 [00:02<02:14, 41.62it/s]Fetching 5713 files:   2%|▏         | 109/5713 [00:02<02:15, 41.46it/s]Fetching 5713 files:   2%|▏         | 117/5713 [00:02<02:06, 44.11it/s]Fetching 5713 files:   2%|▏         | 122/5713 [00:02<02:17, 40.81it/s]Fetching 5713 files:   2%|▏         | 132/5713 [00:03<01:57, 47.44it/s]Fetching 5713 files:   2%|▏         | 137/5713 [00:03<02:14, 41.59it/s]Fetching 5713 files:   3%|▎         | 147/5713 [00:03<01:52, 49.33it/s]Fetching 5713 files:   3%|▎         | 155/5713 [00:03<01:51, 49.93it/s]Fetching 5713 files:   3%|▎         | 161/5713 [00:03<01:49, 50.61it/s]Fetching 5713 files:   3%|▎         | 167/5713 [00:03<02:08, 43.26it/s]Fetching 5713 files:   3%|▎         | 177/5713 [00:04<01:53, 48.83it/s]Fetching 5713 files:   3%|▎         | 183/5713 [00:04<01:56, 47.40it/s]Fetching 5713 files:   3%|▎         | 188/5713 [00:04<02:00, 45.97it/s]Fetching 5713 files:   3%|▎         | 193/5713 [00:04<02:04, 44.16it/s]Fetching 5713 files:   3%|▎         | 198/5713 [00:04<02:07, 43.30it/s]Fetching 5713 files:   4%|▎         | 203/5713 [00:04<02:03, 44.57it/s]Fetching 5713 files:   4%|▎         | 208/5713 [00:04<02:00, 45.73it/s]Fetching 5713 files:   4%|▎         | 214/5713 [00:04<01:59, 46.05it/s]Fetching 5713 files:   4%|▍         | 219/5713 [00:04<02:08, 42.67it/s]Fetching 5713 files:   4%|▍         | 229/5713 [00:05<01:56, 46.99it/s]Fetching 5713 files:   4%|▍         | 237/5713 [00:05<01:54, 47.78it/s]Fetching 5713 files:   4%|▍         | 245/5713 [00:05<02:17, 39.86it/s]Fetching 5713 files:   5%|▍         | 258/5713 [00:05<01:37, 56.11it/s]Fetching 5713 files:   5%|▍         | 265/5713 [00:05<01:44, 52.15it/s]Fetching 5713 files:   5%|▍         | 271/5713 [00:06<02:04, 43.56it/s]Fetching 5713 files:   5%|▍         | 278/5713 [00:06<01:55, 46.99it/s]Fetching 5713 files:   5%|▌         | 286/5713 [00:06<02:13, 40.74it/s]Fetching 5713 files:   5%|▌         | 295/5713 [00:06<02:03, 43.86it/s]Fetching 5713 files:   5%|▌         | 304/5713 [00:06<01:51, 48.52it/s]Fetching 5713 files:   5%|▌         | 310/5713 [00:06<01:49, 49.22it/s]Fetching 5713 files:   6%|▌         | 316/5713 [00:07<01:50, 48.77it/s]Fetching 5713 files:   6%|▌         | 323/5713 [00:07<01:43, 51.84it/s]Fetching 5713 files:   6%|▌         | 329/5713 [00:07<01:46, 50.75it/s]Fetching 5713 files:   6%|▌         | 335/5713 [00:07<01:41, 52.76it/s]Fetching 5713 files:   6%|▌         | 341/5713 [00:07<01:44, 51.25it/s]Fetching 5713 files:   6%|▌         | 347/5713 [00:07<02:23, 37.37it/s]Fetching 5713 files:   6%|▋         | 359/5713 [00:07<01:41, 52.70it/s]Fetching 5713 files:   6%|▋         | 366/5713 [00:08<01:48, 49.46it/s]Fetching 5713 files:   7%|▋         | 372/5713 [00:08<01:58, 45.24it/s]Fetching 5713 files:   7%|▋         | 378/5713 [00:08<02:38, 33.74it/s]Fetching 5713 files:   7%|▋         | 386/5713 [00:08<02:15, 39.34it/s]Fetching 5713 files:   7%|▋         | 394/5713 [00:08<02:04, 42.75it/s]Fetching 5713 files:   7%|▋         | 399/5713 [00:08<02:05, 42.19it/s]Fetching 5713 files:   7%|▋         | 404/5713 [00:09<02:05, 42.32it/s]Fetching 5713 files:   7%|▋         | 412/5713 [00:09<01:52, 47.25it/s]Fetching 5713 files:   7%|▋         | 419/5713 [00:09<01:41, 52.16it/s]Fetching 5713 files:   7%|▋         | 425/5713 [00:09<02:27, 35.90it/s]Fetching 5713 files:   8%|▊         | 434/5713 [00:09<02:07, 41.49it/s]Fetching 5713 files:   8%|▊         | 440/5713 [00:09<02:02, 43.09it/s]Fetching 5713 files:   8%|▊         | 449/5713 [00:09<01:44, 50.53it/s]Fetching 5713 files:   8%|▊         | 455/5713 [00:10<01:44, 50.43it/s]Fetching 5713 files:   8%|▊         | 461/5713 [00:10<01:42, 51.03it/s]Fetching 5713 files:   8%|▊         | 467/5713 [00:10<02:15, 38.81it/s]Fetching 5713 files:   8%|▊         | 476/5713 [00:10<02:08, 40.89it/s]Fetching 5713 files:   8%|▊         | 484/5713 [00:10<01:54, 45.69it/s]Fetching 5713 files:   9%|▊         | 492/5713 [00:10<01:53, 45.97it/s]Fetching 5713 files:   9%|▉         | 500/5713 [00:11<01:55, 45.29it/s]Fetching 5713 files:   9%|▉         | 508/5713 [00:11<01:50, 47.15it/s]Fetching 5713 files:   9%|▉         | 516/5713 [00:11<01:45, 49.06it/s]Fetching 5713 files:   9%|▉         | 522/5713 [00:11<01:42, 50.81it/s]Fetching 5713 files:   9%|▉         | 528/5713 [00:11<02:06, 41.13it/s]Fetching 5713 files:   9%|▉         | 534/5713 [00:11<01:59, 43.22it/s]Fetching 5713 files:   9%|▉         | 542/5713 [00:12<01:55, 44.71it/s]Fetching 5713 files:  10%|▉         | 550/5713 [00:12<01:50, 46.83it/s]Fetching 5713 files:  10%|▉         | 555/5713 [00:12<01:51, 46.31it/s]Fetching 5713 files:  10%|▉         | 561/5713 [00:12<01:47, 47.97it/s]Fetching 5713 files:  10%|▉         | 566/5713 [00:12<01:56, 44.36it/s]Fetching 5713 files:  10%|█         | 573/5713 [00:12<01:43, 49.82it/s]Fetching 5713 files:  10%|█         | 579/5713 [00:12<01:46, 48.01it/s]Fetching 5713 files:  10%|█         | 585/5713 [00:12<01:46, 47.95it/s]Fetching 5713 files:  10%|█         | 591/5713 [00:13<01:44, 48.99it/s]Fetching 5713 files:  10%|█         | 596/5713 [00:13<02:08, 39.96it/s]Fetching 5713 files:  11%|█         | 606/5713 [00:13<01:39, 51.56it/s]Fetching 5713 files:  11%|█         | 612/5713 [00:13<01:45, 48.50it/s]Fetching 5713 files:  11%|█         | 618/5713 [00:13<01:45, 48.51it/s]Fetching 5713 files:  11%|█         | 625/5713 [00:13<01:46, 47.81it/s]Fetching 5713 files:  11%|█         | 631/5713 [00:13<01:53, 44.77it/s]Fetching 5713 files:  11%|█         | 637/5713 [00:14<01:55, 44.07it/s]Fetching 5713 files:  11%|█▏        | 646/5713 [00:14<01:47, 47.32it/s]Fetching 5713 files:  11%|█▏        | 652/5713 [00:14<01:54, 44.30it/s]Fetching 5713 files:  12%|█▏        | 660/5713 [00:14<01:46, 47.46it/s]Fetching 5713 files:  12%|█▏        | 667/5713 [00:14<01:44, 48.26it/s]Fetching 5713 files:  12%|█▏        | 672/5713 [00:14<01:50, 45.74it/s]Fetching 5713 files:  12%|█▏        | 677/5713 [00:15<02:11, 38.28it/s]Fetching 5713 files:  12%|█▏        | 685/5713 [00:15<01:57, 42.68it/s]Fetching 5713 files:  12%|█▏        | 693/5713 [00:15<01:51, 45.08it/s]Fetching 5713 files:  12%|█▏        | 701/5713 [00:15<01:44, 47.92it/s]Fetching 5713 files:  12%|█▏        | 706/5713 [00:15<01:46, 47.16it/s]Fetching 5713 files:  12%|█▏        | 712/5713 [00:15<01:42, 48.91it/s]Fetching 5713 files:  13%|█▎        | 718/5713 [00:15<01:40, 49.58it/s]Fetching 5713 files:  13%|█▎        | 724/5713 [00:15<01:38, 50.88it/s]Fetching 5713 files:  13%|█▎        | 730/5713 [00:16<01:53, 43.97it/s]Fetching 5713 files:  13%|█▎        | 738/5713 [00:16<01:52, 44.39it/s]Fetching 5713 files:  13%|█▎        | 746/5713 [00:16<01:46, 46.84it/s]Fetching 5713 files:  13%|█▎        | 752/5713 [00:16<02:08, 38.61it/s]Fetching 5713 files:  13%|█▎        | 763/5713 [00:16<01:42, 48.39it/s]Fetching 5713 files:  13%|█▎        | 771/5713 [00:16<01:41, 48.67it/s]Fetching 5713 files:  14%|█▎        | 777/5713 [00:17<01:39, 49.68it/s]Fetching 5713 files:  14%|█▎        | 784/5713 [00:17<01:40, 49.20it/s]Fetching 5713 files:  14%|█▍        | 790/5713 [00:17<01:36, 50.86it/s]Fetching 5713 files:  14%|█▍        | 796/5713 [00:17<01:53, 43.50it/s]Fetching 5713 files:  14%|█▍        | 806/5713 [00:17<01:29, 55.13it/s]Fetching 5713 files:  14%|█▍        | 813/5713 [00:17<01:32, 52.70it/s]Fetching 5713 files:  14%|█▍        | 819/5713 [00:17<01:34, 51.93it/s]Fetching 5713 files:  14%|█▍        | 826/5713 [00:18<01:29, 54.83it/s]Fetching 5713 files:  15%|█▍        | 832/5713 [00:18<01:41, 48.25it/s]Fetching 5713 files:  15%|█▍        | 838/5713 [00:18<02:04, 39.21it/s]Fetching 5713 files:  15%|█▍        | 843/5713 [00:18<02:01, 39.93it/s]Fetching 5713 files:  15%|█▍        | 853/5713 [00:18<01:42, 47.33it/s]Fetching 5713 files:  15%|█▌        | 861/5713 [00:18<01:43, 47.08it/s]Fetching 5713 files:  15%|█▌        | 869/5713 [00:19<01:40, 48.32it/s]Fetching 5713 files:  15%|█▌        | 877/5713 [00:19<01:48, 44.39it/s]Fetching 5713 files:  15%|█▌        | 885/5713 [00:19<01:34, 50.83it/s]Fetching 5713 files:  16%|█▌        | 893/5713 [00:19<01:34, 51.14it/s]Fetching 5713 files:  16%|█▌        | 901/5713 [00:19<01:31, 52.48it/s]Fetching 5713 files:  16%|█▌        | 909/5713 [00:19<01:32, 52.07it/s]Fetching 5713 files:  16%|█▌        | 917/5713 [00:19<01:34, 50.79it/s]Fetching 5713 files:  16%|█▌        | 925/5713 [00:20<01:35, 50.11it/s]Fetching 5713 files:  16%|█▋        | 933/5713 [00:20<01:32, 51.62it/s]Fetching 5713 files:  16%|█▋        | 939/5713 [00:20<01:33, 51.14it/s]Fetching 5713 files:  17%|█▋        | 948/5713 [00:20<01:27, 54.29it/s]Fetching 5713 files:  17%|█▋        | 955/5713 [00:20<01:22, 57.87it/s]Fetching 5713 files:  17%|█▋        | 961/5713 [00:20<01:29, 52.99it/s]Fetching 5713 files:  17%|█▋        | 967/5713 [00:20<01:27, 54.49it/s]Fetching 5713 files:  17%|█▋        | 973/5713 [00:21<01:30, 52.47it/s]Fetching 5713 files:  17%|█▋        | 980/5713 [00:21<01:26, 54.74it/s]Fetching 5713 files:  17%|█▋        | 986/5713 [00:21<01:25, 55.07it/s]Fetching 5713 files:  17%|█▋        | 992/5713 [00:21<01:34, 49.92it/s]Fetching 5713 files:  18%|█▊        | 1000/5713 [00:21<01:28, 53.29it/s]Fetching 5713 files:  18%|█▊        | 1006/5713 [00:21<01:29, 52.81it/s]Fetching 5713 files:  18%|█▊        | 1012/5713 [00:21<01:51, 42.20it/s]Fetching 5713 files:  18%|█▊        | 1021/5713 [00:21<01:29, 52.41it/s]Fetching 5713 files:  18%|█▊        | 1027/5713 [00:22<01:38, 47.36it/s]Fetching 5713 files:  18%|█▊        | 1035/5713 [00:22<01:36, 48.72it/s]Fetching 5713 files:  18%|█▊        | 1043/5713 [00:22<01:33, 49.86it/s]Fetching 5713 files:  18%|█▊        | 1049/5713 [00:22<02:35, 29.97it/s]Fetching 5713 files:  19%|█▊        | 1063/5713 [00:22<01:41, 45.65it/s]Fetching 5713 files:  19%|█▊        | 1071/5713 [00:23<01:38, 47.26it/s]Fetching 5713 files:  19%|█▉        | 1079/5713 [00:23<01:35, 48.72it/s]Fetching 5713 files:  19%|█▉        | 1085/5713 [00:23<01:32, 49.94it/s]Fetching 5713 files:  19%|█▉        | 1091/5713 [00:23<01:41, 45.72it/s]Fetching 5713 files:  19%|█▉        | 1097/5713 [00:23<01:52, 40.87it/s]Fetching 5713 files:  19%|█▉        | 1105/5713 [00:23<01:36, 47.70it/s]Fetching 5713 files:  19%|█▉        | 1113/5713 [00:23<01:32, 49.61it/s]Fetching 5713 files:  20%|█▉        | 1119/5713 [00:24<01:31, 50.35it/s]Fetching 5713 files:  20%|█▉        | 1125/5713 [00:24<01:55, 39.81it/s]Fetching 5713 files:  20%|█▉        | 1134/5713 [00:24<01:42, 44.83it/s]Fetching 5713 files:  20%|█▉        | 1142/5713 [00:24<01:38, 46.28it/s]Fetching 5713 files:  20%|██        | 1150/5713 [00:24<01:34, 48.06it/s]Fetching 5713 files:  20%|██        | 1158/5713 [00:24<01:32, 49.19it/s]Fetching 5713 files:  20%|██        | 1166/5713 [00:25<01:29, 50.83it/s]Fetching 5713 files:  21%|██        | 1172/5713 [00:25<01:29, 50.72it/s]Fetching 5713 files:  21%|██        | 1178/5713 [00:25<01:26, 52.20it/s]Fetching 5713 files:  21%|██        | 1184/5713 [00:25<01:33, 48.48it/s]Fetching 5713 files:  21%|██        | 1190/5713 [00:25<01:28, 50.89it/s]Fetching 5713 files:  21%|██        | 1196/5713 [00:25<01:27, 51.91it/s]Downloading 'data/chunk-001/episode_001201.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/6LABdIa0r10dNvU8pyHmUclX5BE=.44b58bd6cc3923307c5c5592133aad76baa9f90e9ce368145c99bd3dcff7c799.incomplete'
+Downloading 'data/chunk-001/episode_001200.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/x74nhH6LUiD11Uh8_gB4lgNIFMw=.2367714f6904430ee712b36b9cf86279d163aa60f6fdea1d69c494f4fe716067.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001202.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/cjEHypFmhxx5kIfckf9LyYgsKCU=.d32428f552b114b14a707488f23209fe4d2cf351c68f3b7a3c50a07c4e43a11d.incomplete'
+Downloading 'data/chunk-001/episode_001204.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/3pDX-ga_ql20RYd93tWZv7vJuNw=.ba3288cee6ce4c2d4bb39cef99734a69ea20230449b4a91d39e249c1a8825895.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001205.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/q6b2Uvb6BWuxVUZDKdMqI0gHXfk=.b4aa69656220e95b56ca514478e14aad8ecfda3f0083d8aa0715ce04cd728dc2.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001203.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/qVFcBqrctXeAHMuiUFb_IIr8OnQ=.555d07083b4def7205052779287b1ab3a828281afcdc7d6844ae8f7f337ccb21.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001206.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/6-mIhi8Rtp-YCZtJ8WiI0Rb-8Jk=.57fcb9d4af9edf3c4187c58ef8a73cd50cc04201c87c7929648ebe26f0f8c961.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001207.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/oCtwiGXkzGaFVepcR-1t5N9yY7Y=.913a8765f3ace4b439d2482506d2f3395436c980fb7a356282059d5d7fd49f88.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001200.parquet
+Fetching 5713 files:  21%|██        | 1202/5713 [00:27<06:59, 10.76it/s]Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001203.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001201.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001205.parquet
+Downloading 'data/chunk-001/episode_001208.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/VNqZ8DNcJ9yxUtFDnwBIDsKafqw=.1291d3c03560b3ee911a1f358201298acb36f77eb94acca453516d7846732510.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001210.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/lFPy-PeaRmZZVVZXMG3rl6Noet8=.2f7d12a6eaae920fa946155dc35e701017880a07e8e328c37640a08f856fecc0.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001209.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/AZMPM-OeJ-u-Jo4mqrlWgBrw2WE=.9442016aac1e45578395b8c5c72ba5add4976c2198eec825f52f20b51cf3f374.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001211.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/Ksu27yXGLpAMRXChMlRhbO5-FWE=.c86b4bf4515814047c0adca71ddd62db8b26fbe27fdfe3cfc212379ad30753f8.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001204.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001206.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001207.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001202.parquet
+Fetching 5713 files:  21%|██        | 1206/5713 [00:27<07:55,  9.48it/s]Downloading 'data/chunk-001/episode_001212.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/ZJsrabekGVgvhf4bOTSuMM-8RWw=.a6dede498e2092517bc9fce973ee30147b0dc4c10af3e068290ff7f6bfbbcb40.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001213.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/-w_jLDdgEFQpYxb_-0pAPQSmYxc=.3d1ac1997cfd4809a66732ef6752c1f11d68dc7cfbb1fb5d8aa5e27222ee4a6d.incomplete'
+Downloading 'data/chunk-001/episode_001214.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/n2xSQ9cdyoC7hmD979RvV3u406k=.44ff98b3a43231bbd929b28b1e18c8ac413c46960fb91d68551eccb81524ac04.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001215.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/wSNLEIivihIKkXTFiSpHsp-sIBo=.8f3954d359d16143adffb4626ecf06997366da6471bcf4bd50e97f9132af3767.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001208.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001209.parquet
+Fetching 5713 files:  21%|██        | 1210/5713 [00:28<09:11,  8.16it/s]Downloading 'data/chunk-001/episode_001216.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/tiKHI8ubABgFSxWdFBZKx0fO1h0=.676d8a465ba1b3598023734ec5f807aa5fd112e70bb330e04b80e2852f793cc7.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001217.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/qM7rMaMh8o6HjcsdG5_QFco_R9g=.548f9fd09f4d28c6495c4844ca3c55123cbf2fe362b200b8466bf047d0f9d349.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001211.parquet
+Downloading 'data/chunk-001/episode_001218.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/2JGI3IvCJM9Uv_ePqM9grRTJvO4=.0e1d4909046de1fef0c3e14b208255e837d320cffe42b7a5c0f441949a7bb56d.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001212.parquet
+Downloading 'data/chunk-001/episode_001219.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/9CYLWE4JjawsE3bzG9n7ovZ6evw=.3cc439cc61743322e47f1fe10ed4fd18280d9340f4ff53a3e877dcaa20b14339.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001214.parquet
+Downloading 'data/chunk-001/episode_001220.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/wZBkJjldQRSzmPTGcoj1XLDrdKQ=.6deb7918d97b7b24e2d148197e64ed20a5f772c779ce956aa45dcf8cc8dd8526.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001215.parquet
+Downloading 'data/chunk-001/episode_001221.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/FXFa7ehenbiHNAGJ5aliJSQyDgA=.cd5059643798ccdb6fc37bded162e9e90107b9522cc2c93ff795142ff322f51d.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001217.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001218.parquet
+Downloading 'data/chunk-001/episode_001222.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/5gk8tG_uweUFmGLYvqfVI11f0bc=.4dabf1d9d1e5b179be177485883e6cb26b7b3d6afccb6316de6792cf02bc65a8.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001223.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/YSKhNsXIwCvuy6qK26stYAYX7ho=.2bb73c5581cbba2407fa0540aea71016e5a7e55626b9425c19d7a78cd810fa86.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001213.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001210.parquet
+Fetching 5713 files:  21%|██        | 1213/5713 [00:30<15:37,  4.80it/s]Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001219.parquet
+Downloading 'data/chunk-001/episode_001224.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/n8ttpwJrJQZ7xkBfzqyNAYzC2ao=.20ca90d34490001e4292f27e5b126bc21b2a207effcc61d9b6b03764155c3c77.incomplete'
+Downloading 'data/chunk-001/episode_001225.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/zaZGyKVdrU7OFMeam67jj-6ywXg=.a3aa80db7baf5b72fcdbaf0df213203b2a8c00b39f74d5772a8e863a412ec163.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001216.parquet
+Fetching 5713 files:  21%|██▏       | 1218/5713 [00:30<11:41,  6.41it/s]Downloading 'data/chunk-001/episode_001226.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/sGVJNM-ee1rm5ve3kzP0hdhdXgc=.3f26e1e4ee0322b6a9bd90c997a6fd424427657b2b3df031453bc24810f41f45.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001227.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/X5i1FtfTSJqFcD41Q82e3ppFvQU=.4083ae243782dd4fde634dc9f17c6a013c229f308bc19ebd4fe80bded51a3046.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001220.parquet
+Fetching 5713 files:  21%|██▏       | 1222/5713 [00:30<10:16,  7.29it/s]Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001221.parquet
+Downloading 'data/chunk-001/episode_001228.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/qPAcdcLNHfewKPoF8YYTA35xNcM=.71093ffaf7b5238eaa1ffa0d45074d2fbf6a4fac430fde172862da2b3d7f8334.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001229.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/NgMFjre23nbTFIFSlX_EJswjO4c=.85c69fe42870d5bc0f82acd772c23ad5813b7860444da4473f8945a040b5bc39.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001222.parquet
+Fetching 5713 files:  21%|██▏       | 1224/5713 [00:31<11:35,  6.45it/s]Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001224.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001223.parquet
+Fetching 5713 files:  21%|██▏       | 1226/5713 [00:31<10:27,  7.16it/s]Downloading 'data/chunk-001/episode_001230.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/W7cr9AebXYDOZ69qGed6wikQfQA=.765cbc1142dfac523a048f7f0e01272511f120bed62ab7f6434c6a621863be79.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001226.parquet
+Downloading 'data/chunk-001/episode_001231.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/tMRaFBRpezpkmlbo9BaZa7Mlqvo=.475568498ebaaa202c96f6d2a20ce840a3389d4ef940a777d3bd142f662bacee.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001232.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/KDTWF9aiLkXefGlMo8TG5R6vhrg=.bfc96e9efdca26a3292b1cdfeb1def28e324516f83d6e92d1e6ad712d35d63ec.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001233.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/I-i0H2V9wlJ-zq1OjmGKXe_qhAE=.b11fb5f96f6d2bb266ecedaf69b2c21cb2f6f297fa6e8f97937f61a8080dadef.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001229.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001225.parquet
+Fetching 5713 files:  21%|██▏       | 1228/5713 [00:32<13:08,  5.69it/s]Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001227.parquet
+Downloading 'data/chunk-001/episode_001234.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/TSlQEUwLWNaWB4r9ZFcsVAoblV0=.5403511dc5855cc0c4cb37d43cd93162428ccbf5dc92d14e501135fc474f2c9e.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001228.parquet
+Downloading 'data/chunk-001/episode_001235.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/ghSoeWomZRe8oROgOc0PRjlB4KY=.f309d70e5191bf69b2fa429ba5e7690eee8f5e69a6e06b91a4f6d24767939a94.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Fetching 5713 files:  22%|██▏       | 1230/5713 [00:32<11:27,  6.52it/s]Downloading 'data/chunk-001/episode_001236.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/PI_MavS57OdtYy3Ai4oqeCda67k=.e28fc08f399b7a3b87ced1f3ace7f8a7bbcb6eb851d02a052e0a9187cd7cdd8b.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001237.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/eNXvFzaI3NJSPcQzgc2y6ijyyC0=.e657fbe56e5928d47369f58247a4458da2ecdf9ddb160469d0ed263688fefada.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001232.parquet
+Download complete. Moving file to /home/mealbaba/datasets/UnifoLM-WBT-VLA/data/chunk-001/episode_001230.parquet
+Fetching 5713 files:  22%|██▏       | 1232/5713 [00:32<11:58,  6.23it/s]Downloading 'data/chunk-001/episode_001238.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/Zqu_6gl7fVlvylIpV8yCguEiS5g=.2f6665d19c7869e4cea3b9ff517fc665d7a1a01617df5b7c317329b80524e657.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001239.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/P26fggEHtalvc2aahxIYhDdlBdI=.53eee365721ec26032028a00c8cbedf2c6667d762d2239f4840b2c169baac598.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Cancellation requested; stopping current tasks.
+Fetching 5713 files:  22%|██▏       | 1232/5713 [00:32<01:59, 37.44it/s]
+Downloading 'data/chunk-001/episode_001241.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/sp80Ye5wKXlut-vTUDeUtQcAwcE=.f5ec1e6098a23e627ab0356208e6a5c95cda1dc360c47674ea9cd8bc50ddc393.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001240.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/lk0B1v8X2mXoOheSFCa9nRKx1Q8=.1645474d23afd4ebdb32af7e0bf51eb0b801173921c50b7f3d432138490e7715.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001242.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/J00PATrHHAQkTeCh_VoyzjsoPYA=.ce42b8fa4cf7efa235c0f6c13c8e9cc37ea75110abb8ae5a1dd0776d7ca85f7d.incomplete'
+Downloading 'data/chunk-001/episode_001243.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/5dJVAfbRRayFXeUaAH2tlrEzE_w=.7c9eefc3fd8127bc7691465860d99b6c64899dfe73a7c0ef7921a8af14c9eee7.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001245.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/zaINwGEJ-4sSg5pzGupxj2nN7Kk=.2d9a7377351c2d9f08bb64eaa849808c24b427977a4f0236dd7543e432cf2f17.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Downloading 'data/chunk-001/episode_001244.parquet' to '/home/mealbaba/datasets/UnifoLM-WBT-VLA/.cache/huggingface/download/data/chunk-001/F-ppbB0Wq9bAlNuyL6-5rD0lrwo=.e40122b4ba622befb1bc5a7ad97bd1d914216218c26ee9e67809be504fbe75e0.incomplete'
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Xet Storage is enabled for this repo. Downloading file from Xet Storage..
+Cancellation requested; stopping current tasks.
+Traceback (most recent call last):
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/tqdm/contrib/concurrent.py", line 51, in _executor_map
+    return list(tqdm_class(ex.map(fn, *iterables, chunksize=chunksize), **kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/concurrent/futures/_base.py", line 451, in result
+    self._condition.wait(timeout)
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 327, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/bin/huggingface-cli", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/huggingface_hub/commands/huggingface_cli.py", line 59, in main
+    service.run()
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/huggingface_hub/commands/download.py", line 153, in run
+    print(self._download())  # Print path to downloaded files
+          ^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/huggingface_hub/commands/download.py", line 187, in _download
+    return snapshot_download(
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 327, in snapshot_download
+    thread_map(
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/tqdm/contrib/concurrent.py", line 69, in thread_map
+    return _executor_map(ThreadPoolExecutor, fn, *iterables, **tqdm_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mealbaba/humanoid-vla/openpi/.venv/lib/python3.11/site-packages/tqdm/contrib/concurrent.py", line 49, in _executor_map
+    with PoolExecutor(max_workers=max_workers, initializer=tqdm_class.set_lock,
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/concurrent/futures/_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/concurrent/futures/thread.py", line 235, in shutdown
+    t.join()
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 1119, in join
+    self._wait_for_tstate_lock()
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 1139, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Cancellation requested; stopping current tasks.
+Exception ignored in: <module 'threading' from '/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py'>
+Traceback (most recent call last):
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 1560, in _shutdown
+    atexit_call()
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/concurrent/futures/thread.py", line 31, in _python_exit
+    t.join()
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 1119, in join
+    self._wait_for_tstate_lock()
+  File "/home/mealbaba/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/threading.py", line 1139, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt: 
