@@ -3,6 +3,7 @@ from collections.abc import Sequence
 import dataclasses
 import enum
 import logging
+import os
 import pathlib
 from typing import Generic, TypeVar
 
@@ -181,15 +182,22 @@ def preprocess_observation(
             # Convert from [-1, 1] to [0, 1] for augmax.
             image = image / 2.0 + 0.5
 
+            # SONIC_AUG_HEAVY=1: stronger photometric+geometric augmentation for
+            # scene-robustness fine-tunes (sim-to-lab transfer). Off = openpi defaults.
+            heavy = bool(os.environ.get("SONIC_AUG_HEAVY"))
             transforms = []
             if "wrist" not in key:
                 height, width = image.shape[1:3]
+                crop = 0.90 if heavy else 0.95
+                rot = 10 if heavy else 5
                 transforms += [
-                    augmax.RandomCrop(int(width * 0.95), int(height * 0.95)),
+                    augmax.RandomCrop(int(width * crop), int(height * crop)),
                     augmax.Resize(width, height),
-                    augmax.Rotate((-5, 5)),
+                    augmax.Rotate((-rot, rot)),
                 ]
             transforms += [
+                augmax.ColorJitter(brightness=0.6, contrast=0.7, saturation=0.8, hue=0.2, p=0.8)
+                if heavy else
                 augmax.ColorJitter(brightness=0.3, contrast=0.4, saturation=0.5),
             ]
             sub_rngs = jax.random.split(rng, image.shape[0])

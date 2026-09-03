@@ -1442,6 +1442,9 @@ _CONFIGS = [
         model=pi0_config.Pi0Config(
             pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
             prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+            # keep RTC alive when initing from an RTC-trained checkpoint (rtc_heft chain);
+            # default 0 = off, matching the config's original non-RTC semantics.
+            rtc_max_delay=int(os.environ.get("SONIC_RTC_MAX_DELAY", "0")), rtc_delay_weighting="uniform",
         ),
         data=SonicTokenDataConfig(
             repo_id="sonic_bhs2_sft", history=0, history_stride=20, split="train",
@@ -1513,6 +1516,8 @@ _CONFIGS = [
         model=pi0_config.Pi0Config(
             pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
             prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+            # keep RTC alive when initing from an RTC-trained checkpoint; default 0 = off.
+            rtc_max_delay=int(os.environ.get("SONIC_RTC_MAX_DELAY", "0")), rtc_delay_weighting="uniform",
         ),
         data=SonicTokenDataConfig(
             repo_id="sonic_steleop_ht", history=0, history_stride=20, split="train",
