@@ -206,11 +206,10 @@ class Pi0FAST(_model.BaseModel):
         input_token_embeddings, input_mask, ar_mask = self.embed_inputs(observation)
         attn_mask = make_attn_mask(input_mask, ar_mask)
 
-        # Compute one-hot targets: we predict *next* token, so shift the input tokens by one.
-        targets = jax.nn.one_hot(
-            observation.tokenized_prompt[:, 1:],
-            self.PaliGemma.llm.module.vocab_size,
-        )
+        # Targets: we predict the *next* token, so shift the input tokens by one.
+        # Gather the target log-prob directly instead of one-hot x logp — the one-hot was
+        # [b, l, 257k] and dominated memory at long token lengths (directvlm: l ~ 1792).
+        target_ids = observation.tokenized_prompt[:, 1:]
 
         # Each input predicts *next* token, so we don't input the last token.
         pre_logits, _, _ = self.PaliGemma.llm(
@@ -222,14 +221,14 @@ class Pi0FAST(_model.BaseModel):
         # Only decode logits for the target tokens to save memory
         # (decoding matmul is large because it is a seq_len x vocab_size dense layer).
         logits, _ = self.PaliGemma.llm(
-            pre_logits=pre_logits[:, -targets.shape[1] :],
+            pre_logits=pre_logits[:, -target_ids.shape[1] :],
         )
         logp = jax.nn.log_softmax(logits, axis=-1)
 
         # Compute CE loss on token targets
         assert observation.token_loss_mask is not None, "Token loss mask is required"
         loss_mask = observation.token_loss_mask[:, 1:]
-        token_pplx = jnp.sum(targets * logp, axis=-1)
+        token_pplx = jnp.take_along_axis(logp, target_ids[..., None], axis=-1)[..., 0]
         return -jnp.sum(token_pplx * loss_mask, axis=-1) / jnp.clip(jnp.sum(loss_mask, -1), 1)
 
     @override

@@ -436,8 +436,14 @@ class SonicTokenDataConfig(DataConfigFactory):
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        assert isinstance(model_config, pi0_config.Pi0Config)
-        if model_config.prev_token_history != self.history:
+        # pi05_sonic_directvlm (0906): Pi0FASTConfig is also accepted — PaliGemma directly
+        # autoregresses FSQ keyframe tokens (no action expert, no prev-token history).
+        is_fast = isinstance(model_config, pi0_fast.Pi0FASTConfig)
+        assert is_fast or isinstance(model_config, pi0_config.Pi0Config)
+        if is_fast:
+            if self.history != 0:
+                raise ValueError("directvlm (Pi0FAST) requires data.history == 0")
+        elif model_config.prev_token_history != self.history:
             raise ValueError(
                 f"model.prev_token_history ({model_config.prev_token_history}) must equal "
                 f"data.history ({self.history})."
@@ -532,10 +538,33 @@ class SonicTokenDataConfig(DataConfigFactory):
             inputs=[sonic_policy.SonicTokenInputs(
                 action_dim=model_config.action_dim,
                 state_dim=32 + (64 if self.use_hand_state else 0) + (14 if self.use_hand_proprio else 0),
+                # pi0_fast derives image slots from the observation -> a single real camera
+                # saves 512 dead SigLIP positions at directvlm's ~2k sequence length.
+                single_camera=is_fast,
             )],
             outputs=[sonic_policy.SonicTokenOutputs()],
         )
-        model_transforms = ModelTransformFactory()(model_config)
+        if is_fast:
+            # Custom FAST branch: SonicTokenizeFSQInputs forwards per-dim validity into the
+            # token loss mask (LeVERB hand dims), which stock TokenizeFASTInputs drops.
+            tok_kwargs = dict(model_config.fast_model_tokenizer_kwargs or {})
+            tok_cls = model_config.fast_model_tokenizer or _tokenizer.FASTTokenizer
+            model_transforms = _transforms.Group(
+                inputs=[
+                    _transforms.InjectDefaultPrompt(None),
+                    _transforms.ResizeImages(224, 224),
+                    sonic_policy.SonicTokenizeFSQInputs(tok_cls(model_config.max_token_len, **tok_kwargs)),
+                ],
+                outputs=[
+                    _transforms.ExtractFASTActions(
+                        tok_cls(model_config.max_token_len, **tok_kwargs),
+                        action_horizon=model_config.action_horizon,
+                        action_dim=model_config.action_dim,
+                    )
+                ],
+            )
+        else:
+            model_transforms = ModelTransformFactory()(model_config)
 
         base = self.create_base_config(assets_dirs, model_config)
         # v2: normalize the 32-D state (quantile -> [-1,1], required by the discrete state tokenizer);
@@ -1315,15 +1344,21 @@ _CONFIGS = [
         model=pi0_config.Pi0Config(
             pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
             prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+            # 0905 (bhs5 on): training-time RTC over the FULL run (Anna's gr00t precedent),
+            # uniform delay, ceiling 16 ticks — matches the serving contract. Norm stats
+            # unaffected (model conditioning only). Pre-bhs5 checkpoints trained without it.
+            rtc_max_delay=int(os.environ.get("SONIC_RTC_MAX_DELAY", "16")), rtc_delay_weighting="uniform",
         ),
         data=SonicTokenDataConfig(
             repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
             test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
             use_hand_proprio=True, he_all_categories=True,
+            # 0904: EgoSuite replaces Xperience as the human corpus, same mix numbers.
+            # No xperience key -> its spec is not built at all (corpus retired 0905).
             weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
-                     "leverb": 0.08, "xperience": 0.68},
+                     "leverb": 0.08, "egosuite": 0.68},
             weights_end={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
-                         "leverb": 0.1, "xperience": 0.2},
+                         "leverb": 0.1, "egosuite": 0.2},
             mix_anneal_samples=12_800_000,
         ),
         batch_size=64,
@@ -1341,6 +1376,50 @@ _CONFIGS = [
         eval_interval=500,
         eval_batches=8,
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # DIRECTVLM (0906): PaliGemma directly autoregresses SONIC FSQ action tokens — pi0-FAST
+    # architecture with SonicFSQTokenizer replacing FAST (each of the 32 lattice values maps
+    # BIT-EXACTLY to one vocab-tail token; 10 stride-5 keyframes x 128 dims = 1280 action
+    # tokens/chunk, keyframes validated by the 0906 Stage-0 gate: held-5 tracks within ~1%).
+    # No action expert, no flow matching — the head-vs-expert ablation against pi05_sonic_bhs2
+    # (bhs5): SAME data recipe, SAME 110-d state (digitized into the prompt), SAME mix/anneal.
+    # RTC needs no training-time machinery here: AR teacher-forcing already trains "continue a
+    # committed prefix"; serving pins executed keyframe tokens as forced decode context.
+    # eval_interval=0: train.py's held-out eval calls sample_actions(num_steps=...), which the
+    # FAST decode loop doesn't accept — offline eval runs via the serving path instead.
+    TrainConfig(
+        name="pi05_sonic_directvlm",
+        project_name="humanoid-vla",
+        model=pi0_fast.Pi0FASTConfig(
+            action_dim=128, action_horizon=50, max_token_len=1792,
+            fast_model_tokenizer=_tokenizer.SonicFSQTokenizer,
+            fast_model_tokenizer_kwargs={"keyframe_stride": 5, "n_keyframes": 10,
+                                         "action_dim": 128},
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_directvlm", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
+                     "leverb": 0.08, "egosuite": 0.68},
+            weights_end={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
+                         "leverb": 0.1, "egosuite": 0.2},
+            mix_anneal_samples=12_800_000,
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=2.5e-5, decay_steps=150_000, decay_lr=2.5e-6,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi0_fast_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=150_000,
+        eval_interval=0,
+        eval_batches=8,
     ),
     # BHS3-RTC: training-time real-time chunking (PI's kinetix recipe) as a SHORT fine-tune of
     # the finished bhs3 checkpoint. Per sample a delay d ~ uniform{0..9} (up to 200 ms at 50 Hz;

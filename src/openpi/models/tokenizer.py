@@ -369,3 +369,114 @@ class FSQTokenizer:
         if isinstance(tokens, list):
             tokens = np.array(tokens)
         return self._paligemma_tokenizer.vocab_size() - 1 - self._fast_skip_tokens - tokens
+
+
+class SonicFSQTokenizer:
+    """Direct SONIC-FSQ action tokenization for pi05_sonic_directvlm (no FAST, no expert).
+
+    Actions are (action_horizon, action_dim) SONIC FSQ lattice values (multiples of 1/16 in
+    [-1, 15/16], i.e. 32 levels). We subsample `n_keyframes` rows at `keyframe_stride`
+    (Stage-0 gate 0906: held-5 keyframes track within ~1% of full rate) and map each value
+    BIT-EXACTLY to one PaliGemma vocab-tail token: code = round(v*16)+16 in [0,31],
+    pg_id = 257023 - code (inside the band pi0_fast_base pretrained on). A chunk is
+    n_keyframes*action_dim action tokens; extract_actions inverts and expands each keyframe
+    `keyframe_stride`x back to the full horizon. Prompt/state prefix and the mask
+    conventions mirror FASTTokenizer exactly.
+    """
+
+    def __init__(self, max_len: int = 1792, keyframe_stride: int = 5, n_keyframes: int = 10,
+                 action_dim: int = 128):
+        self._max_len = max_len
+        self._stride = keyframe_stride
+        self._n_kf = n_keyframes
+        self._action_dim = action_dim
+
+        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        with path.open("rb") as f:
+            self._paligemma_tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
+        self._band_hi = self._paligemma_tokenizer.vocab_size() - 1 - 128   # 257023 = code 0
+        self._band_lo = self._band_hi - 31                                 # code 31
+
+    def _values_to_pg(self, values: np.ndarray) -> np.ndarray:
+        codes = np.clip(np.round(values * 16.0).astype(np.int64) + 16, 0, 31)
+        return self._band_hi - codes
+
+    def _pg_to_values(self, pg_ids: np.ndarray) -> np.ndarray:
+        codes = self._band_hi - pg_ids.astype(np.int64)
+        return (codes - 16).astype(np.float32) / 16.0
+
+    def tokenize(
+        self, prompt: str, state: np.ndarray, actions: np.ndarray | None,
+        dim_valid: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        cleaned_text = prompt.lower().strip().replace("_", " ")
+        discretized_state = np.digitize(state, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
+        state_str = " ".join(map(str, discretized_state))
+        prefix = f"Task: {cleaned_text}, State: {state_str};\n"
+        prefix_tokens = self._paligemma_tokenizer.encode(prefix, add_bos=True)
+
+        action_loss = []
+        if actions is not None:
+            kf = np.asarray(actions)[:: self._stride][: self._n_kf]        # (K, D)
+            pg = self._values_to_pg(kf).reshape(-1)
+            head = self._paligemma_tokenizer.encode("Action: ")
+            tail = self._paligemma_tokenizer.encode("|", add_eos=True)
+            postfix_tokens = head + pg.tolist() + tail
+            # per-token loss over action tokens; dim_valid (H, D) masks e.g. LeVERB hand dims
+            if dim_valid is not None:
+                dv = np.asarray(dim_valid)[:: self._stride][: self._n_kf].reshape(-1).astype(bool)
+            else:
+                dv = np.ones(pg.size, dtype=bool)
+            action_loss = [True] * len(head) + dv.tolist() + [True] * len(tail)
+        else:
+            postfix_tokens = []
+
+        tokens = prefix_tokens + postfix_tokens
+        token_mask = [True] * len(tokens)
+        ar_mask = [0] * len(prefix_tokens) + [1] * len(postfix_tokens)
+        loss_mask = [False] * len(prefix_tokens) + action_loss
+
+        tokens_len = len(tokens)
+        if tokens_len < self._max_len:
+            padding = [False] * (self._max_len - tokens_len)
+            tokens = tokens + padding
+            token_mask = token_mask + padding
+            ar_mask = ar_mask + padding
+            loss_mask = loss_mask + padding
+        else:
+            if tokens_len > self._max_len:
+                logging.warning(
+                    f"Token length ({tokens_len}) exceeds max length ({self._max_len}), truncating."
+                )
+            tokens, token_mask = tokens[: self._max_len], token_mask[: self._max_len]
+            ar_mask, loss_mask = ar_mask[: self._max_len], loss_mask[: self._max_len]
+
+        return np.asarray(tokens), np.asarray(token_mask), np.asarray(ar_mask), np.asarray(loss_mask)
+
+    def extract_actions(self, tokens: np.ndarray, action_horizon: int, action_dim: int) -> np.ndarray:
+        """Sampled ids -> (action_horizon, action_dim) chunk. Robust: keep in-band ids in
+        order until n_keyframes*action_dim collected or EOS; short output repeats the last
+        complete keyframe row; empty output returns zeros (the idle-adjacent code)."""
+        ids = np.asarray(tokens).astype(np.int64).reshape(-1)
+        need = self._n_kf * action_dim
+        picked = []
+        for t in ids:
+            if t == 1:      # PaliGemma EOS
+                break
+            if self._band_lo <= t <= self._band_hi:
+                picked.append(t)
+                if len(picked) >= need:
+                    break
+        if not picked:
+            return np.zeros((action_horizon, action_dim), dtype=np.float32)
+        n_rows = len(picked) // action_dim
+        if n_rows == 0:
+            rows = np.zeros((1, action_dim), dtype=np.float32)
+        else:
+            rows = self._pg_to_values(np.asarray(picked[: n_rows * action_dim])).reshape(n_rows, action_dim)
+        while rows.shape[0] < self._n_kf:
+            rows = np.concatenate([rows, rows[-1:]], axis=0)
+        out = np.repeat(rows, self._stride, axis=0)[:action_horizon]
+        if out.shape[0] < action_horizon:
+            out = np.concatenate([out, np.repeat(out[-1:], action_horizon - out.shape[0], axis=0)])
+        return out.astype(np.float32)

@@ -39,25 +39,25 @@ class SonicTokenInputs(transforms.DataTransformFn):
     # State width: 32 (q_dev+gravity) or 96 (+ the 1s-lagged hand-state token, bhs configs).
     # Only sizes the zeros fallback when no state is provided.
     state_dim: int = 32
+    # directvlm/pi0_fast: image slots are derived from the observation, so emitting only the
+    # real camera drops 512 dead SigLIP positions. pi0/pi05 need all 3 slots (fixed IMAGE_KEYS).
+    single_camera: bool = False
 
     def __call__(self, data: dict) -> dict:
         image = _parse_image(data["image"])
         zeros_img = np.zeros_like(image)
+        images = {"base_0_rgb": image}
+        image_mask = {"base_0_rgb": np.True_}
+        if not self.single_camera:
+            images |= {"left_wrist_0_rgb": zeros_img, "right_wrist_0_rgb": zeros_img}
+            image_mask |= {"left_wrist_0_rgb": np.False_, "right_wrist_0_rgb": np.False_}
         inputs = {
             # Proprio state (q_dev(29) + gravity(3) [+ lagged hand token(64)]) when a proprio source
             # is present; used by pi0.5 only if discrete_state_input=True (tokenized into the
             # prompt). Fully-latent configs still receive it but the model ignores it. Fallback = zeros.
             "state": np.asarray(data.get("state", np.zeros(self.state_dim, np.float32)), dtype=np.float32),
-            "image": {
-                "base_0_rgb": image,
-                "left_wrist_0_rgb": zeros_img,
-                "right_wrist_0_rgb": zeros_img,
-            },
-            "image_mask": {
-                "base_0_rgb": np.True_,
-                "left_wrist_0_rgb": np.False_,
-                "right_wrist_0_rgb": np.False_,
-            },
+            "image": images,
+            "image_mask": image_mask,
         }
         # Previous-token history (raw FSQ tokens; projected into the prefix by the model).
         # Zero-history configs (prev_token_history=0, the leak-free variant) emit an empty
@@ -119,3 +119,35 @@ class SonicCheckpointWeightLoader(weight_loaders.WeightLoader):
                 fresh += 1
         print(f"[SonicCheckpointWeightLoader] transplanted {kept} params, fresh-init {fresh}")
         return flax.traverse_util.unflatten_dict(result, sep="/")
+
+
+@dataclasses.dataclass(frozen=True)
+class SonicTokenizeFSQInputs(transforms.DataTransformFn):
+    """TokenizeFASTInputs variant for pi05_sonic_directvlm: forwards the per-(t,dim) action
+    validity (and per-timestep validity) into the tokenizer so masked dims (LeVERB hands)
+    carry no CE loss. The stock transform drops both."""
+
+    tokenizer: object
+
+    def __call__(self, data: dict) -> dict:
+        if (prompt := data.pop("prompt", None)) is None:
+            raise ValueError("Prompt is required")
+        if not isinstance(prompt, str):
+            prompt = prompt.item()
+        state, actions = data["state"], data.get("actions")
+        dim_valid = data.pop("action_dim_valid", None)
+        valid = data.pop("action_valid", None)
+        if actions is not None:
+            if dim_valid is None:
+                dim_valid = np.ones(np.asarray(actions).shape, dtype=bool)
+            if valid is not None:
+                dim_valid = np.asarray(dim_valid, bool) & np.asarray(valid, bool)[:, None]
+        tokens, token_mask, ar_mask, loss_mask = self.tokenizer.tokenize(
+            prompt, state, actions, dim_valid=dim_valid)
+        return {
+            **data,
+            "tokenized_prompt": tokens,
+            "tokenized_prompt_mask": token_mask,
+            "token_ar_mask": ar_mask,
+            "token_loss_mask": loss_mask,
+        }
