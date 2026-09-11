@@ -1466,6 +1466,44 @@ _CONFIGS = [
         eval_batches=8,
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
     ),
+    # BHS6-RTC-FT: RTC fine-tune (10k) of a NON-RTC bhs6 base (v1.1 tokens + EgoSuite). Identical
+    # to pi05_sonic_bhs3_rtc EXCEPT the human corpus is EgoSuite (xperience 0), so the ft
+    # continues on the base's own data distribution. Weight-init from the base:
+    # SONIC_FT_INIT=<bhs6 ckpt>/params (e.g. .../pi05_bhs6_nortc_0908/{100000,149999}/params).
+    # Reuses the base's norm stats (assets ./assets/pi05_sonic_bhs2) -> run with SKIP_STATS_GATE=1
+    # (the gate would false-fail on the end-mix vs the .68 start-mix the stats were sampled under).
+    TrainConfig(
+        name="pi05_sonic_bhs6_rtcft",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+            rtc_max_delay=int(os.environ.get("SONIC_RTC_MAX_DELAY", "16")), rtc_delay_weighting="uniform",
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            weights={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
+                     "leverb": 0.1, "xperience": 0.0, "egosuite": 0.2},
+            assets=AssetsConfig(assets_dir="./assets/pi05_sonic_bhs2"),
+        ),
+        batch_size=64,
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=500, peak_lr=2.5e-5, decay_steps=10_000, decay_lr=2.5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            os.environ.get("SONIC_FT_INIT", "gs://openpi-assets/checkpoints/pi05_base/params")
+        ),
+        num_workers=8,
+        num_train_steps=10_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
     # BHS3-RTC-HEFT: HE-only post-train ON TOP of the RTC fine-tune (init = the bhs3_rtc ft
     # final via SONIC_FT_INIT), keeping the RTC prefix-continuation objective active so the
     # skill doesn't wash out. Data block mirrors pi05_sonic_bhs3_rtc exactly (same state
