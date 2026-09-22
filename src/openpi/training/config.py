@@ -23,6 +23,7 @@ import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
 import openpi.policies.sonic_policy as sonic_policy
 import openpi.shared.download as _download
+import openpi.shared.nnx_utils as nnx_utils
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
 import openpi.training.misc.polaris_config as polaris_config
@@ -1357,8 +1358,8 @@ _CONFIGS = [
             # No xperience key -> its spec is not built at all (corpus retired 0905).
             weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
                      "leverb": 0.08, "egosuite": 0.68},
-            weights_end={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
-                         "leverb": 0.1, "egosuite": 0.2},
+            weights_end={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                         "leverb": 0.2, "egosuite": 0.2},  # 0911: uniform end mix
             mix_anneal_samples=12_800_000,
         ),
         batch_size=64,
@@ -1373,6 +1374,61 @@ _CONFIGS = [
         ),
         num_workers=8,
         num_train_steps=150_000,
+        eval_interval=500,
+        eval_batches=8,
+        loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
+    ),
+    # BHS2-FROZENBB (0918): pi0.5 with the FROZEN PaliGemma backbone — train ONLY the action
+    # expert + its projection heads, leave the ~2.7B VLM (SigLIP vision tower + the Gemma prefix
+    # expert) at the pi05_base init. Identical to pi05_sonic_bhs2 (same data recipe / mix / anneal /
+    # 110-d state / stats) EXCEPT: (a) freeze_filter freezes the backbone, (b) num_train_steps 100k,
+    # (c) NON-RTC (rtc_max_delay=0, matches the non-RTC mainline arm), (d) a MUCH higher batch —
+    # the launcher (launch_bhs2_frozenbb.sh) sets batch 256: freezing removes the backbone's Adam
+    # moments + fp32 master copy + its backward-pass activations (scripts/train.py builds opt_state
+    # and DiffState from trainable_filter only, and casts frozen params to bf16), which frees the
+    # memory a bigger batch needs. Reuses bhs2's norm stats (assets ./assets/pi05_sonic_bhs2 ->
+    # launch with SKIP_STATS_GATE=1: the data pipeline is byte-identical to bhs2, whose stats were
+    # already recomputed under the launch env). LR kept at the bhs2 schedule (peak 5e-5) for a
+    # controlled comparison — scale up if the larger batch wants it.
+    TrainConfig(
+        name="pi05_sonic_bhs2_frozenbb",
+        project_name="humanoid-vla",
+        model=pi0_config.Pi0Config(
+            pi05=True, action_dim=128, action_horizon=50, max_token_len=512,
+            prev_token_history=0, discrete_state_input=True, use_action_dim_valid=True,
+            rtc_max_delay=0, rtc_delay_weighting="uniform",  # NON-RTC (matches the non-RTC mainline)
+        ),
+        # Freeze the huge backbone: (any vision-tower param) OR (any llm param that is NOT the
+        # action expert). The Gemma mixture puts BOTH experts under .llm; the action expert's
+        # tensors carry the _1 suffix (same convention get_freeze_filter uses). So trainable =
+        # llm _1 (action expert) + the top-level heads (action_in/out_proj, state_proj, *_mlp).
+        freeze_filter=nnx.Any(
+            nnx_utils.PathRegex(".*img.*"),
+            nnx.All(nnx_utils.PathRegex(".*llm.*"), nnx.Not(nnx_utils.PathRegex(".*llm.*_1.*"))),
+        ),
+        data=SonicTokenDataConfig(
+            repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
+            test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
+            use_hand_proprio=True, he_all_categories=True,
+            weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
+                     "leverb": 0.08, "egosuite": 0.68},
+            weights_end={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                         "leverb": 0.2, "egosuite": 0.2},
+            mix_anneal_samples=12_800_000,
+            assets=AssetsConfig(assets_dir="./assets/pi05_sonic_bhs2"),  # reuse bhs2 norm stats
+        ),
+        batch_size=1024,  # 0918: measured ~36 GB/GPU at 256 (frozen backbone) -> 1024 lands ~100-120 GB
+        fsdp_devices=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=2_000, peak_lr=1e-4, decay_steps=100_000, decay_lr=1e-4,  # LR x2 for batch 1024 (sqrt-scaled from 256); revert to 5e-5 for a strict same-LR comparison
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=sonic_policy.SonicCheckpointWeightLoader(
+            "gs://openpi-assets/checkpoints/pi05_base/params"
+        ),
+        num_workers=8,
+        num_train_steps=100_000,
         eval_interval=500,
         eval_batches=8,
         loss_dim_groups={"body": (0, 64), "hand": (64, 128)},
@@ -1402,8 +1458,8 @@ _CONFIGS = [
             use_hand_proprio=True, he_all_categories=True,
             weights={"humanoid_everyday": 0.08, "psi": 0.08, "unifolm_wbt": 0.08,
                      "leverb": 0.08, "egosuite": 0.68},
-            weights_end={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
-                         "leverb": 0.1, "egosuite": 0.2},
+            weights_end={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                         "leverb": 0.2, "egosuite": 0.2},  # 0911: uniform end mix
             mix_anneal_samples=12_800_000,
         ),
         batch_size=64,
@@ -1484,8 +1540,10 @@ _CONFIGS = [
             repo_id="sonic_bhs2", history=0, history_stride=20, split="train",
             test_frac=0.15, use_proprio=True, use_hand=True, use_hand_state=True,
             use_hand_proprio=True, he_all_categories=True,
-            weights={"humanoid_everyday": 0.25, "psi": 0.25, "unifolm_wbt": 0.2,
-                     "leverb": 0.1, "xperience": 0.0, "egosuite": 0.2},
+            # uniform mix (0.2 each) — matches the base's UNIFORM end mix (0911 decision), so
+            # the 10k RTC ft continues on the same distribution the base converged to.
+            weights={"humanoid_everyday": 0.2, "psi": 0.2, "unifolm_wbt": 0.2,
+                     "leverb": 0.2, "xperience": 0.0, "egosuite": 0.2},
             assets=AssetsConfig(assets_dir="./assets/pi05_sonic_bhs2"),
         ),
         batch_size=64,
